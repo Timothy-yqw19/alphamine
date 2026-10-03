@@ -189,6 +189,8 @@ the artefact checks and the caveats that stop these numbers from being
 comparable with published CSI 300 results. Reading the winning formulas suggests
 reversal; measuring them says otherwise - see the R5-lite section below.
 
+![P0.2 budget curve](docs/images/p02-random-budget-curve.png)
+
 ## Search-space ablations (R5-lite)
 
 Five variants, 1,000 formulas each, same seed and depth:
@@ -201,7 +203,7 @@ Five variants, 1,000 formulas each, same seed and depth:
 | `no-volume` | 37 | 6 | +0.0593 | +0.0647 | - |
 | `no-time-series` | 20 | 8 | +0.0844 | +0.0550 | - |
 
-![R5-lite](</Users/wangsheng/Documents/ChatGPT/New project/runs/20261001-225430-r5-lite/r5-lite.png>)
+![R5-lite](docs/images/r5-lite.png)
 
 What it says:
 

@@ -1,9 +1,11 @@
 # Data: the daily_pv.h5 panel is ~400 MB, never commit it.
 data/
 
-# Run artefacts
+# Run artefacts.  Charts that belong in the documentation are copied into
+# docs/images/ and re-included below.
 runs/
 *.png
+!docs/images/*.png
 
 # Python
 __pycache__/

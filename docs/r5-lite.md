@@ -17,7 +17,7 @@ formulas per variant, same seed, same maximum depth 4, full panel, train
 | `no-volume` | 37 | 6 | +0.0593 | +0.0647 | - |
 | `no-time-series` | 20 | 8 | +0.0844 | +0.0550 | - |
 
-![R5-lite](</Users/wangsheng/Documents/ChatGPT/New project/runs/20261001-225430-r5-lite/r5-lite.png>)
+![R5-lite](images/r5-lite.png)
 
 The two universe variants were given their own shuffled-label nulls on purpose.
 A 300-name cross-section produces a noisier daily IC than a 3,500-name one, so
