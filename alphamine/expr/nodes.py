@@ -87,6 +87,47 @@ def size(node: Node) -> int:
     raise TypeError(f"unknown node type {type(node)!r}")
 
 
+#: Path from the root to a node: one child index per level.  ``()`` is the root.
+Path = tuple[int, ...]
+
+
+def positions(node: Node) -> list[Path]:
+    """Every node's path, root first.  Stable order, so it is reproducible."""
+
+    out: list[Path] = [()]
+    if isinstance(node, Op):
+        for index, arg in enumerate(node.args):
+            out.extend((index, *rest) for rest in positions(arg))
+    return out
+
+
+def at(node: Node, path: Path) -> Node:
+    """The subtree at ``path``."""
+
+    for index in path:
+        if not isinstance(node, Op):
+            raise IndexError(f"path {path} runs past a leaf")
+        node = node.args[index]
+    return node
+
+
+def replace(node: Node, path: Path, other: Node) -> Node:
+    """A copy of ``node`` with the subtree at ``path`` replaced by ``other``.
+
+    Trees are immutable, so this rebuilds the spine rather than mutating.  The
+    empty path replaces the whole tree.
+    """
+
+    if not path:
+        return other
+    if not isinstance(node, Op):
+        raise IndexError(f"path {path} runs past a leaf")
+    index, *rest = path
+    args = list(node.args)
+    args[index] = replace(args[index], tuple(rest), other)
+    return Op(node.name, tuple(args))
+
+
 def used_ops(node: Node) -> Counter[str]:
     """Counts of every operator name in the tree."""
 

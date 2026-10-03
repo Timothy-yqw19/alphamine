@@ -2,6 +2,7 @@
 
     alphamine check                 # what is in the data, and is the harness sane
     alphamine random --n 10000      # the random-search baseline (experiment P0.2)
+    alphamine gp --n 10000          # minimal genetic programming (P1)
     alphamine ablate --n 1000       # search-space ablations (idea R5-lite)
 """
 
@@ -20,6 +21,10 @@ from .data import field_variables, load_panel
 from .expr import Engine, canonical, depth, parse
 from .ablation import DEFAULT_VARIANTS, run_ablations
 from .ablation import plot_turnover_profile, select_formulas, turnover_profile
+from .gp import GPConfig
+from .gp import VARIABLES as GP_VARIABLES
+from .gp import describe as describe_gp
+from .gp import run_gp
 from .runner import (
     evaluate_batch,
     persist_run,
@@ -156,6 +161,80 @@ def cmd_random(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_gp(args: argparse.Namespace) -> int:
+    """Minimal genetic programming under the same fixed budget (experiment P1).
+
+    Selection is on training IC only, so the validation curve stays a clean
+    out-of-sample measure and can be put beside the P0.2 random baseline curve
+    at the same number of evaluated formulas.
+    """
+
+    cfg = _cfg_from_args(args)
+    gp = GPConfig(
+        population=args.population,
+        tournament=args.tournament,
+        crossover_rate=args.crossover,
+        mutation_rate=args.mutation,
+        elite=args.elite,
+        max_depth=args.depth,
+        variables=tuple(args.variables) if args.variables else GP_VARIABLES,
+    )
+    print(f"evolving {args.n} formulas ({describe_gp(gp)}, seed {args.seed})")
+
+    results = run_gp(
+        cfg, budget=args.n, seed=args.seed, gp=gp, workers=args.workers
+    )
+
+    null_results = None
+    if args.null:
+        null_cfg = replace(cfg, shuffle_labels=True, shuffle_seed=args.seed + 777)
+        print("running the shuffled-label null model on the same formulas ...")
+        null_results = evaluate_batch(
+            list(results["formula"]), null_cfg, workers=args.workers,
+            with_turnover=False,
+        )
+
+    out_dir = persist_run(
+        args.name,
+        results,
+        cfg,
+        meta={
+            "method": "gp",
+            "max_depth": args.depth,
+            "seed": args.seed,
+            "null_model": bool(args.null),
+            "gp": describe_gp(gp),
+        },
+    )
+    if null_results is not None:
+        null_results.to_csv(out_dir / "evals_null.csv", index=False)
+
+    plot_budget_curve(
+        results,
+        out_dir / "budget_curve.png",
+        title=f"Genetic programming, {len(results)} formulas (depth <= {args.depth})",
+        null_results=null_results,
+    )
+
+    ok = results[results["status"] == "ok"]
+    print()
+    print(f"artefacts      : {out_dir}")
+    print(f"status         : {results['status'].value_counts().to_dict()}")
+    print(
+        "median cost    : "
+        f"{pd.to_numeric(results['seconds'], errors='coerce').median():.2f}s/formula"
+    )
+    for split, column in (("train", "train_rank_ic"), ("valid", "valid_rank_ic")):
+        best = pd.to_numeric(ok[column], errors="coerce")
+        if best.notna().any():
+            idx = best.idxmax()
+            print(f"best {split:5s} IC : {best.max():+.4f}   {ok.loc[idx, 'formula']}")
+    if null_results is not None:
+        null_best = pd.to_numeric(null_results["valid_rank_ic"], errors="coerce").max()
+        print(f"null floor     : {null_best:+.4f}  (best validation IC on shuffled labels)")
+    return 0
+
+
 def cmd_ablate(args: argparse.Namespace) -> int:
     """R5-lite: change one ingredient of the search space at a time."""
 
@@ -275,6 +354,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="also run the same formulas on shuffled labels (luck floor, idea R2)",
     )
     rnd.set_defaults(func=cmd_random)
+
+    gpp = sub.add_parser("gp", help="minimal genetic programming (P1)")
+    add_common(gpp)
+    gpp.add_argument("--n", type=int, default=1000, help="evaluation budget")
+    gpp.add_argument("--depth", type=int, default=4, help="maximum tree depth")
+    gpp.add_argument("--seed", type=int, default=0)
+    gpp.add_argument("--name", default="gp")
+    gpp.add_argument("--variables", nargs="*", help="restrict the input variables")
+    gpp.add_argument("--population", type=int, default=200)
+    gpp.add_argument("--tournament", type=int, default=3)
+    gpp.add_argument("--crossover", type=float, default=0.6)
+    gpp.add_argument("--mutation", type=float, default=0.4)
+    gpp.add_argument("--elite", type=int, default=2)
+    gpp.add_argument("--turnover", action="store_true", help="also compute turnover")
+    gpp.add_argument(
+        "--score-test",
+        action="store_true",
+        help="also score the held-out test split (slower; normally reserved for the end)",
+    )
+    gpp.add_argument(
+        "--null",
+        action="store_true",
+        help="also run the same formulas on shuffled labels (luck floor, idea R2)",
+    )
+    gpp.set_defaults(func=cmd_gp)
 
     abl = sub.add_parser("ablate", help="search-space ablations (R5-lite)")
     add_common(abl)
