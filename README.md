@@ -57,7 +57,9 @@ python -m alphamine.cli ablate --n 1000 --depth 4 --workers 5
 | `alphamine/expr/` | Expression trees, parser, operator registry, cached engine, random sampler |
 | `alphamine/eval/` | Cross-sectional IC, ICIR, turnover, decay |
 | `alphamine/runner.py` | Batch evaluation, budget curves, run artefacts |
-| `alphamine/cli.py` | `check` and `random` entry points |
+| `alphamine/ablation.py` | R5-lite variants and the turnover decile profile |
+| `alphamine/cli.py` | `check`, `random`, `ablate` and `profile` entry points |
+| `docs/HANDOFF.md` | Start here to continue the work in a fresh session |
 | `data/` | `daily_pv.h5` (398 MB, git-ignored) |
 | `runs/` | One directory per run: `evals.csv`, `summary.json`, `budget_curve.png` |
 
