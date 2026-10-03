@@ -102,6 +102,35 @@ That is a real result about the problem, not a failure of the implementation:
 selection cannot beat a flat landscape, and it will happily *look* like it wins if
 the metric is chosen on the validation set.
 
+## The parsimony ablation
+
+`--parsimony 0.005` makes a tree that is within 0.005 IC of a fatter one win the
+head-to-head in tournament selection, so bloat has to pay for itself instead of
+being free. Run `runs/20261002-223227-p1-gp-parsimony` - same seed, same budget,
+and its generation 0 is byte-identical to the run above, so the two differ only
+in what selection did afterwards.
+
+| budget | no parsimony (best-of-N / selected) | parsimony 0.005 |
+| --- | --- | --- |
+| 35 | +0.0411 / +0.0411 | +0.0411 / +0.0411 |
+| 250 | +0.0618 / +0.0618 | +0.0618 / +0.0618 |
+| 2,000 | +0.0655 / +0.0618 | +0.0618 / +0.0618 |
+
+**The honest metric is unchanged**, for the same reason as before: the best
+training IC is still the generation-0 champion, which both runs inherit.
+
+**There was no bloat to suppress.** Mean tree size went from 6.16 to 5.93 nodes,
+p90 from 10 to 9, and the maximum stayed at 16 in both. The unpressured run had
+already shown no upward drift, so the pressure had nothing to act on - consistent
+with a search that never got deep enough to bloat.
+
+One incidental observation, and it is a good illustration of the artifact: with
+parsimony on, the best-of-N column falls to +0.0618 and therefore *equals* the
+honest metric. The +0.0655 in the unpressured run was not something parsimony
+improved on - it is a formula that parsimony's different trajectory never sampled.
+Whether a run's best-of-N exceeds its honest number is a property of the sample,
+not of the method.
+
 ## Caveats
 
 * **One seed.** The study plan's R3 calls for five. The *magnitude* of any
@@ -113,8 +142,8 @@ the metric is chosen on the validation set.
   GP, so this does not flatter random search.
 * Depth 4, the same cap as P0.2. A deeper grammar might have more structure to
   exploit - but then the comparison has to re-run the baseline at the same cap.
-* The parsimony ablation (`--parsimony`) is implemented and tested but has not
-  been run; the bloat curve above is from the unpressured run.
+* The parsimony ablation is run above, on one seed. It moved the honest metric by
+  nothing and tree size by 0.23 nodes.
 
 ## Performance note
 
@@ -135,4 +164,8 @@ python scripts/compare_searches.py --budgets 35,100,250,1000,2000 \
   runs/*p02-random-depth4 runs/*p1-gp-depth4 runs/*p01-alphas101
 
 python scripts/gp_generations.py runs/*p1-gp-depth4
+
+# the parsimony ablation: same seed, same budget, one extra knob
+python -m alphamine.cli gp --n 2000 --depth 4 --workers 5 --seed 0 \
+  --population 200 --parsimony 0.005 --name p1-gp-parsimony
 ```

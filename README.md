@@ -605,8 +605,10 @@ formula, `mulconst(ts_cov(abs(volume), vwap_proxy, 5), -0.1)`, at +0.074203, and
 
 This is the third result pointing the same way and the most direct one: adding
 selection, inheritance and variation on top of random sampling changes nothing in
-this grammar at this budget. `docs/p1-gp.md` has the full analysis, including why
-the tempting answer is wrong.
+this grammar at this budget. Parsimony pressure changes nothing either - same
+honest metric, and only 0.23 nodes off the mean tree size, because there was no
+bloat to suppress. `docs/p1-gp.md` has the full analysis, including why the
+tempting answer is wrong.
 
 ## Traps
 

@@ -24,6 +24,7 @@ byte-identical to the original.
 | `20261002-211321-r5-lite-csi300` | `csi300`: true point-in-time CSI 300 membership, same 1,000 formulas | README, `docs/HANDOFF.md`, `docs/r5-lite.md` |
 | `20261002-212654-p01-alphas101` | P0.1: the 35 reproducible 101 Alphas, scored | README, `docs/p01-alphas101.md` |
 | `20261002-220802-p1-gp-depth4` | P1: genetic programming, 2,000 formulas + null | README, `docs/HANDOFF.md`, `docs/p1-gp.md` |
+| `20261002-223227-p1-gp-parsimony` | P1: the same run with parsimony pressure on | `docs/p1-gp.md` |
 
 ## The per-formula records
 
