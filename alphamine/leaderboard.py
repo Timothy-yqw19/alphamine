@@ -272,6 +272,11 @@ def run_leaderboard(
     """Run every (label arm, method, seed) and write the board to a run directory."""
 
     cfg = cfg or Config()
+    out = Path(cfg.runs_dir) / f"{datetime.now():%Y%m%d-%H%M%S}-{name}"
+    out.mkdir(parents=True, exist_ok=True)
+
+    # Persist each run the moment it finishes. A multi-hour board that only
+    # writes at the end loses everything if the last run dies.
     entries: list[Entry] = []
     for arm in labels:
         for method in methods:
@@ -288,13 +293,11 @@ def run_leaderboard(
                     labels=arm,
                     progress=progress,
                 )
+                entry.frame.to_csv(out / f"evals-{entry.label}.csv", index=False)
                 entries.append(entry)
 
     scores = score_entries(entries, budgets)
     summary = summarise(scores)
-
-    out = Path(cfg.runs_dir) / f"{datetime.now():%Y%m%d-%H%M%S}-{name}"
-    out.mkdir(parents=True, exist_ok=True)
     scores.to_csv(out / "leaderboard.csv", index=False)
     summary.to_csv(out / "aggregate.csv", index=False)
     (out / "leaderboard.md").write_text(render(scores, summary))
@@ -316,6 +319,4 @@ def run_leaderboard(
             indent=1,
         )
     )
-    for entry in entries:
-        entry.frame.to_csv(out / f"evals-{entry.label}.csv", index=False)
     return out
