@@ -1,0 +1,21 @@
+# Data: the daily_pv.h5 panel is ~400 MB, never commit it.
+data/
+
+# Run artefacts
+runs/
+*.png
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# macOS
+.DS_Store
+
+# Local config
+.env
