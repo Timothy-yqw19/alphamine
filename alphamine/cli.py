@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 from .config import Config
-from .data import field_variables, load_panel
+from .data import load_panel
 from .expr import Engine, canonical, depth, parse
 from .ablation import DEFAULT_VARIANTS, run_ablations
 from .ablation import plot_turnover_profile, select_formulas, turnover_profile

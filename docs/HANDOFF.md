@@ -44,13 +44,19 @@ Packages in the env: numpy 2.4.6, pandas 3.0.6, scipy 1.17.1, tables 3.11.1,
 h5py 3.16.0, matplotlib 3.11.2, pytest 9.1.1. **pandas 3.0** matters: copy-on-write
 is always on and `pct_change` no longer pads by default.
 
-Commits:
+The work is organised as experiments.  Each has a write-up, and `docs/runs/` holds
+the `summary.json` and the per-formula `evals.csv` behind every number it quotes:
 
-```
-d179aff  feat: turnover contrast, MIT licence, and a fixed-formula decile profile
-07a68c6  docs: ship the experiment charts inside the repo
-1fbbf23  feat: fixed-budget harness for studying how alpha-mining systems search
-```
+| experiment | write-up | headline |
+| --- | --- | --- |
+| P0.2 random baseline | `docs/p02-random-baseline.md` | saturates by N = 100 |
+| R5-lite ablations | `docs/r5-lite.md` | the universe is the biggest lever among turnover slices |
+| CSI 300 membership | `docs/r5-lite.md` | the real index does *not* inherit `liquid300`'s edge |
+| P0.1 textbook alphas | `docs/p01-alphas101.md` | 35 formulas beat random search at equal budget |
+| P1 genetic programming | `docs/p1-gp.md` | GP ties random search exactly |
+| R3 leaderboard | *in progress* | five seeds, random vs GP |
+
+`git log --oneline` has the full history.
 
 ---
 
@@ -73,7 +79,7 @@ for i in csi300 csi500; do
 done
 
 python -m alphamine.cli check          # panel, universe, label, per-op cost
-python -m pytest -q                    # 145 tests, ~0.3 s
+python -m pytest -q                    # 151 tests, ~0.3 s
 ```
 
 `MPLCONFIGDIR=/tmp/mplcache` avoids a matplotlib cache warning; the user's home
@@ -92,7 +98,7 @@ is unused.  Download it only to experiment against a small *real* file.
 | `alphamine/config.py` | `Config` dataclass: paths, date window, horizon, universe rules, workers, cache size, which splits to score |
 | `alphamine/data.py` | Load HDF5, coerce to a date x instrument float32 panel, universe rules, forward-return labels, turnover ranking, and universe restriction (turnover slices or point-in-time index membership) |
 | `alphamine/expr/nodes.py` | Expression trees and the **canonical string**, which doubles as the cache key |
-| `alphamine/expr/ops.py` | 38 operators in three families (`arith`, `ts`, `cs`), each with a cost-derived window cap |
+| `alphamine/expr/ops.py` | 43 operators in three families (`arith`, `ts`, `cs`) - 37 in the default sampling pool - each with a cost-derived window cap |
 | `alphamine/expr/parse.py` | Parser: `ts_mean(volume, 20)` and infix `a / b` both work; `to_rpn` for the future RL generator |
 | `alphamine/expr/engine.py` | Evaluator with an LRU **byte-budgeted** subtree cache |
 | `alphamine/expr/sample.py` | Type-aware random sampler |
@@ -101,6 +107,8 @@ is unused.  Download it only to experiment against a small *real* file.
 | `alphamine/ablation.py` | R5-lite variants, the turnover profile, selection of formulas by one split |
 | `alphamine/alphas101.py` | The 35 reproducible 101 Alphas, transcribed |
 | `alphamine/gp.py` | Minimal genetic programming (P1) |
+| `alphamine/leaderboard.py` | Equal-budget comparison across seeds (R3) |
+| `scripts/` | Standalone re-runnable checks (see section 9) |
 | `alphamine/cli.py` | `check`, `random`, `ablate`, `profile` |
 
 Design decisions worth keeping:
@@ -304,6 +312,53 @@ so no bucket's IC is a selected maximum.
 Monotone from decile 2 down, ends differ by +0.024 against a combined standard
 error of 0.005.
 
+### CSI 300 membership - the index is not the proxy
+
+`liquid300` is a trailing-turnover ranking, not CSI 300.  With true point-in-time
+membership (free, MIT, from `index-constitution`) the *same* 1,000 formulas score
+**+0.0620** on validation, against +0.0955 for `liquid300` and +0.0647 for the
+whole market.  So "the liquid segment is two to three times better" is a property
+of *turnover ranking*, not of index membership.  Run `20261002-211321-r5-lite-csi300`.
+
+### P0.1 - the 35 reproducible 101 Alphas
+
+Write-up `docs/p01-alphas101.md`, formulas `alphamine/alphas101.py`.  At equal
+budget the textbook library **wins**: best-of-35 textbook +0.0508 against random
+search's +0.0411 at 35 and at 100 draws, and random search needs its entire
+2,000-formula budget to overtake it.  28 of 35 clear the 0.002 noise floor, median
++0.0169.
+
+Two things worth carrying forward.  The top three alphas are one idea written
+three ways (a negative price-versus-volume covariance).  And every top-eight alpha
+*gains* IC at a 20-day horizon, which reproduces P0.2's "the durable signals are
+slow" by a completely independent route.
+
+### P1 - genetic programming
+
+Write-up `docs/p1-gp.md`, code `alphamine/gp.py`.  **GP ties random search exactly**
+on the honest equal-budget metric at every budget - same formula selected, same
+number reported.  Its best training IC came from generation 0, which is literally
+a random sample of 200, and 1,800 further evaluations never beat it.  Parsimony
+pressure changes nothing either: same metric, and no bloat to suppress (mean tree
+size 6.16 -> 5.93 nodes).
+
+### Which metric to compare methods on
+
+The most transferable lesson here, and P1 is the worked example.  Two numbers can
+be read off any run:
+
+* **best-of-N** - the running maximum of validation IC.  Every table in this
+  section originally used it.  It is a *selection on validation*, which no method
+  could actually have made, and it grows with N for free.
+* **selected** - among the first N formulas take the best **training** IC, the
+  choice a method can really make, then report that formula's validation IC.
+
+On P0.2 the two differ by 0.0029 (+0.0647 against +0.0618), more than the 0.002
+noise floor.  In P1 they change the *conclusion*: GP looks 0.0008 ahead on
+best-of-N and is exactly level on `selected`.  `scripts/compare_searches.py` and
+`alphamine/leaderboard.py` report both, and **R3 and anything after it must decide
+on `selected`.**
+
 ### Null models - the calibration
 
 Three separate nulls, all measured:
@@ -437,12 +492,16 @@ deterministic. Each run writes `evals.csv`, `summary.json` and a chart into
    honest equal-budget metric GP ties random search exactly at every budget: its
    best training formula came from its own random generation 0 and 1,800 further
    evaluations never beat it. Its apparently higher best-of-N is a selection on
-   validation. The parsimony ablation is implemented but not yet run.
+   validation. The parsimony ablation is run: same metric, no bloat to suppress.
 4. **R2 properly** - shuffled-label runs at large N, to separate "the grammar is
    a strong prior" from "the search procedure is smart".
-5. **R3 - the equal-budget leaderboard** across random / GP / RL / surrogate /
-   LLM at 2,000 evaluations and five seeds. Budget for it: 60,000 evaluations is
-   roughly 8 hours at five workers with the current scorer.
+5. **R3 - the equal-budget leaderboard.** The machinery is in
+   (`alphamine/leaderboard.py`, `alphamine leaderboard`). A random-versus-GP run
+   at 2,000 evaluations and five seeds is in progress; read it on the `selected`
+   metric or it will reproduce P1's artifact. RL / surrogate / LLM generators do
+   not exist yet (P2-P4), so the full five-method board is not runnable. Budget
+   note: the old 60,000-evaluation estimate assumed one worker pool per run, and
+   GP builds a fresh pool per generation, so its real cost is higher.
 6. **P0.2 at 10,000 evaluations** to finish the curve as originally specified.
 7. R1 (planted-alpha synthetic market), R4 (MAP-Elites), R6 (decay and
    transfer), R7 (multiple-testing correction - `factor-qc` and
@@ -482,11 +541,27 @@ deterministic. Each run writes `evals.csv`, `summary.json` and a chart into
 * **Worker processes use `spawn`**, and each one loads the panel, so budget ~15 s
   of startup per worker per batch. Five workers cost about 7 GB resident; do not
   raise the count without checking memory.
-* **`.git` is read-only inside the sandbox** here, so commits and config writes
-  need an escalation.
+* **Check the sandbox mode before assuming you can write.** Under a
+  `workspace-write` policy this repository is outside the workspace and `.git` is
+  read-only, so commits need an escalation; under `danger-full-access` they do
+  not. Do not assume either way.
 * **Matplotlib needs `MPLCONFIGDIR`** set to a writable directory.
 * **`runs/` and `data/` are git-ignored.** Charts meant for the documentation
   must be copied into `docs/images/`.
 * **A formula that is only good inside the universe where it was found is not a
   factor.** Check every winner on at least one other universe before reporting
   it.
+* **Decide comparisons on the train-selected metric, never on best-of-N.** See
+  section 6. This is the trap that made P1 look like a GP win.
+* **Each GP generation builds a fresh worker pool**, so it pays the ~15 s
+  spawn-and-load cost per generation rather than once. At 2,000 evaluations with
+  population 200 that is ~11 pools and 3-4 minutes; at R3 scale it stops being
+  negligible. A persistent pool is the obvious fix and has not been done.
+* **The comparison and `where` operators are registered but deliberately *not* in
+  the default sampling pool**, so the random search space is unchanged. Adding
+  them to the pool would silently invalidate every published ablation number.
+* **`index-constitution` CSVs carry a UTF-8 BOM**; read them with
+  `encoding="utf-8-sig"` or the first column name comes back as `\ufeffsymbol`.
+* **`summary.json` from `random` and `gp` runs embeds absolute config paths**,
+  unlike the ablation summaries. Strip the prefix before committing one into
+  `docs/runs/` - see `docs/runs/README.md`.

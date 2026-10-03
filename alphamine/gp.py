@@ -115,10 +115,6 @@ def _random(rng: np.random.Generator, gp: GPConfig) -> Node:
     )
 
 
-def _fitness(population: list[Node], scores: dict[str, float]):
-    return lambda node: scores.get(canonical(node), -np.inf)
-
-
 def _score(node: Node, scores: dict[str, float]) -> float:
     return scores.get(canonical(node), -np.inf)
 

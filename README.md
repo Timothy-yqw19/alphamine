@@ -102,7 +102,7 @@ Not started: genetic programming (P1), RL generation (P2), surrogate models
 (P3), the LLM loop (P4), and ideas R1, R3, R4, R6 and R7. R2 has a first cut in
 the form of the shuffled-label nulls; R5-lite is done.
 
-**Tests:** 145 tests in ~0.3 s. They run against a **synthetic in-memory panel**
+**Tests:** 151 tests in ~0.3 s. They run against a **synthetic in-memory panel**
 and need no data download.
 
 ## Where things are
@@ -146,7 +146,7 @@ done
 # What is in the data, and how fast is the harness?
 python -m alphamine.cli check
 
-# 145 tests, ~0.3 s - synthetic panel, no download needed
+# 151 tests, ~0.3 s - synthetic panel, no download needed
 python -m pytest -q
 ```
 

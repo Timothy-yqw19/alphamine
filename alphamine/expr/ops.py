@@ -76,10 +76,6 @@ class OpSpec:
         return tuple(w for w in WINDOWS if w <= self.max_window)
 
 
-def _clean(df: pd.DataFrame) -> pd.DataFrame:
-    return df.replace([np.inf, -np.inf], np.nan).astype("float32")
-
-
 def _safe_div(a, b):
     """Division that yields NaN rather than infinity for a zero denominator.
 
