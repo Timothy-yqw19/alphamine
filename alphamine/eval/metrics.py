@@ -237,6 +237,11 @@ def decay_curve(
     Horizons start at 2 on purpose: with the label ``close(t+h)/close(t+1) - 1``
     a horizon of 1 is identically zero, so its IC is undefined rather than
     small.
+
+    Each horizon drops the last ``horizon`` dates of the window, exactly as
+    :func:`split_dates` does, so a label never reaches past ``end``.  Without
+    that, a 20-day curve ending on 2020-12-31 would score labels that are
+    realised in 2021 - i.e. inside the test period.
     """
 
     dates = panel.dates
@@ -246,7 +251,11 @@ def decay_curve(
     selected = dates[mask]
     out = {}
     for horizon in horizons:
+        window = selected[: max(0, len(selected) - horizon)]
+        if len(window) == 0:
+            out[horizon] = float("nan")
+            continue
         label = panel.forward_return(horizon)
         ic = rank_ic_series(factor, label, panel.tradable, min_cross=min_cross)
-        out[horizon] = float(ic.loc[selected[0] : selected[-1]].mean())
+        out[horizon] = float(ic.loc[window[0] : window[-1]].mean())
     return pd.Series(out, name="rank_ic")

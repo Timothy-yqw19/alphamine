@@ -104,3 +104,50 @@ def test_decay_curve_skips_the_degenerate_one_day_horizon(panel):
     )
     assert 1 not in curve.index
     assert curve.index.min() == 2
+
+
+def test_decay_curve_agrees_with_the_split_clean_scorer(panel):
+    """Regression: the window must drop the tail whose labels cross ``end``.
+
+    ``decay_curve`` used to filter by date alone, so a 20-day curve ending on
+    2020-12-31 scored labels that are realised in 2021 - inside the test period.
+    It now drops the last ``horizon`` dates exactly as ``split_dates`` does,
+    which makes it agree with ``score_factor`` over the same window.
+    """
+
+    horizon = 5
+    start, end = "2020-01-01", "2020-08-31"
+    factor = panel.fields["close"]
+    label = panel.forward_return(horizon)
+
+    curve = decay_curve(
+        panel, factor, horizons=(horizon,), start=start, end=end, min_cross=10
+    )
+    score = score_factor(
+        panel,
+        factor,
+        horizon=horizon,
+        splits=(Split("valid", start, end),),
+        min_cross=10,
+        label=label,
+        split_names=("valid",),
+    )
+    assert curve[horizon] == pytest.approx(score.valid_rank_ic)
+
+
+def test_decay_curve_does_not_use_labels_beyond_its_window(panel):
+    """The last date scored at horizon ``h`` must still have a realised label."""
+
+    horizon = 5
+    end_position = panel.dates.get_loc(pd.Timestamp("2020-08-31"))
+    curve = decay_curve(
+        panel,
+        panel.fields["close"],
+        horizons=(horizon,),
+        start="2020-01-01",
+        end="2020-08-31",
+        min_cross=10,
+    )
+    last_scored = panel.dates[end_position - horizon]
+    assert last_scored + pd.tseries.offsets.BDay(horizon) <= panel.dates[end_position]
+    assert np.isfinite(curve[horizon])
