@@ -149,7 +149,14 @@ sanity check that the tradability filter works.
 `label(t) = close(t+5) / close(t+1) - 1`. Signal at `t`, trade at `t+1`, exit at
 `t+5`. Splits: train 2012-2018, validation 2019-2020, test 2021 onwards. Each
 split drops its last `horizon` rows so a label cannot reach into the next one.
-**The test period has not been touched once.**
+`metrics.decay_curve` used to break that rule - it filtered by `start`/`end`
+alone - and has been fixed; see bug 10 in section 7.
+
+**The test period has not been spent, but it was computed once.** An early harness
+smoke run (`runs/20261001-215104-smoke`, 60 formulas) predates `Config.score_test`
+and scored the test split; nothing was selected on it, no document cites it, and
+every later run leaves the test column empty. "Not spent" is the claim that
+matters; "never touched" is not accurate.
 
 Note that horizon 1 is degenerate under this convention (`close(t+1)/close(t+1) - 1`
 is identically zero), so `decay_curve` starts at 2.
@@ -160,8 +167,13 @@ is identically zero), so `decay_curve` starts at 2.
 
 `vwap_proxy` is `(high + low + close) / 3` - a stand-in, not the variable the 101
 Alphas were written for. Of the 101, **35 can be reproduced from OHLCV alone**;
-48 need vwap, market cap or industry neutralisation. That count was measured by
-parsing two open-source implementations, not estimated.
+47 need `vwap` (34) or an industry classification (13), and 19 are not implemented
+at all. That split is reproducible rather than estimated: statically parsing the
+two implementations in `yli188/WorldQuant_alpha101_code` gives 35 / 34 / 13 / 19 =
+101, and the same 35 are OHLCV-only in both files. The 19 unimplemented ones are
+concentrated in the high-numbered alphas - 48, 56, 58, 59, 63, 67, 69, 70, 76, 79,
+80, 82, 87, 89, 90, 91, 93, 97, 100. Re-run `scripts/count_101_alphas.py` to
+re-derive all of that and to print the 35 ids, which are the P0.1 worklist.
 
 ---
 
@@ -213,7 +225,8 @@ Four findings, in order of importance:
    is `NaN` on `liquid300`, and scores **-0.0171** on the full panel.
 3. **Cross-sectional normalisation is nearly worthless** (removing all five
    `rank`/`zscore`/`scale`/`demean`/`cs_median` costs 13%) and **volume inputs
-   are exactly worthless**.
+   are nearly worthless** - the volume *term* is value-neutral rather than inert,
+   see the note on it below.
 4. **Simpler grammars overfit more.** The train-minus-validation gap is +0.0095
    for `baseline`, +0.0211 for `no-cross-section`, +0.0294 for `no-time-series`.
 
@@ -221,23 +234,33 @@ Four findings, in order of importance:
 
 The `baseline` winner is
 `mul(ts_max(sign(volume), 60), ts_min(div(low, vwap_proxy), 30))`. `sign(volume)`
-is identically 1, so the real factor is:
+is 1 wherever volume is finite and `NaN` where it is not, so
+`ts_max(sign(volume), 60)` is a 60-day "has volume been observed" gate. It is
+value-neutral but not inert - the real factor is:
 
 ```
 ts_min(low / ((high + low + close) / 3), 30)
 ```
 
-Deleting the volume term changes the validation IC by 0.0001. **Always simplify a
-mined formula before believing it.**
+and deleting the gate changes the validation IC by **0.00004** while lifting
+coverage from 0.975 to 0.986. **Always simplify a mined formula before believing
+it - but check what the part you deleted was actually doing.**
 
-| property | value |
-| --- | --- |
-| validation rank IC, 5-day horizon | +0.0642 |
-| validation rank IC, 20-day horizon | +0.0883 (rising, not decaying) |
-| one-day turnover of the rank-weighted book | 0.033 |
-| correlation with 20-day realised volatility | -0.763 |
-| correlation with the 3-day return | -0.004 |
-| validation rank IC on `liquid300` / all / `illiquid300` | +0.0955 / +0.0647 / +0.0298 |
+| property | value | convention |
+| --- | --- | --- |
+| validation rank IC, 5-day horizon | +0.0646 | `score_factor`, split tail dropped |
+| validation rank IC, 20-day horizon | +0.0890 | `score_factor`, split tail dropped |
+| one-day turnover of the rank-weighted book | 0.033 | `metrics.turnover` |
+| correlation with 20-day realised volatility | -0.763 | mean daily cross-sectional Spearman |
+| correlation with the trailing 3-day return | -0.004 | mean daily cross-sectional Spearman |
+| validation rank IC on `liquid300` / all / `illiquid300` | +0.0955 / +0.0647 / +0.0298 | full stored winner, not simplified |
+
+Earlier drafts of this table quoted +0.0642 / +0.0883 for the first two rows and a
+volume-term effect of 0.0001. Those came from `metrics.decay_curve`, which did not
+drop the boundary rows; it has since been fixed and now agrees with
+`score_factor`, so those two values survive only as pre-fix numbers. The bottom
+row is the full stored winner, because the volume gate changes coverage and
+therefore the per-universe name counts.
 
 It is a **low-volatility, price-stability characteristic**, orthogonal to
 reversal, with low turnover, and it gets stronger at longer horizons. An earlier
@@ -313,6 +336,14 @@ Regression tests exist for most of them.
    for anyone cloning the repo. Charts live in `docs/images/` now, and
    `.gitignore` has a `!docs/images/*.png` exception because `*.png` is ignored
    globally.
+10. **`decay_curve` did not drop the boundary rows.** Every other scoring path
+    goes through `split_dates`, which removes the last `horizon` dates of a split
+    so a label cannot reach into the next one. `decay_curve` filtered its window
+    by `start`/`end` alone, so at horizon 20 its default `end="2020-12-31"`
+    scored labels realised in January 2021 - inside the test period. It now uses
+    the same tail drop, and `test_decay_curve_agrees_with_the_split_clean_scorer`
+    pins it to `score_factor`. Consequence: the P0.2 winner is +0.0646 at 5 days
+    and +0.0890 at 20 days, not the +0.0642 / +0.0883 quoted in earlier drafts.
 
 ---
 
@@ -395,7 +426,8 @@ deterministic. Each run writes `evals.csv`, `summary.json` and a chart into
 
 ## 11. Open decisions for the user
 
-* **When to spend the test period.** It has not been looked at. The study plan's
+* **When to spend the test period.** It has not been spent - though one early
+  smoke run did compute it, see section 5. The study plan's
   own checklist says once, at the end; doing it before the R3 leaderboard would
   burn it.
 * **Whether to add a market-cap data source.** This is the one step that needs

@@ -21,3 +21,8 @@ dist/
 
 # Local config
 .env
+
+# Run summaries, kept as the evidence chain for the numbers in the docs.
+# `runs/` above matches docs/runs/ too, so it has to be re-included explicitly.
+!docs/runs/
+!docs/runs/**

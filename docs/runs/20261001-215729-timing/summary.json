@@ -1,0 +1,54 @@
+{
+  "name": "timing",
+  "created": "20261001-215729",
+  "config": {
+    "data_path": "data/daily_pv.h5",
+    "runs_dir": "runs",
+    "start": "2012-01-01",
+    "end": null,
+    "horizon": 5,
+    "min_listing_days": 60,
+    "include_bse": false,
+    "min_cross": 100,
+    "cache_mb": 400,
+    "workers": 4,
+    "splits": [
+      {
+        "name": "train",
+        "start": "2012-01-01",
+        "end": "2018-12-31"
+      },
+      {
+        "name": "valid",
+        "start": "2019-01-01",
+        "end": "2020-12-31"
+      },
+      {
+        "name": "test",
+        "start": "2021-01-01",
+        "end": null
+      }
+    ],
+    "shuffle_labels": false,
+    "shuffle_seed": 12345,
+    "score_test": false
+  },
+  "n_evaluations": 120,
+  "status_counts": {
+    "ok": 112,
+    "degenerate": 8
+  },
+  "median_seconds": 2.2082916664949153,
+  "best": {
+    "train": 0.06223512326058333,
+    "train_formula": "sub(scale(delay(high, 60)), mul(low, sqrt(adv20)))",
+    "valid": 0.05183735846597291,
+    "valid_formula": "div(ts_min(add(returns, vwap_proxy), 20), abs(high))"
+  },
+  "meta": {
+    "method": "random",
+    "max_depth": 4,
+    "seed": 2,
+    "null_model": false
+  }
+}

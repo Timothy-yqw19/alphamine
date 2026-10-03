@@ -67,7 +67,9 @@ sign, scoring +0.0609.
 > winning signal's decay and turnover shows it is a slow low-volatility
 > characteristic (+0.0642 at 5 days, +0.0883 at 20 days, 3.3% daily turnover,
 > -0.76 correlation with realised volatility, -0.004 with the 3-day return), not
-> reversal. See `docs/r5-lite.md`.
+> reversal. Those two ICs are pre-fix `decay_curve` numbers; the function was
+> fixed to drop the boundary rows and now gives +0.0646 and +0.0890, matching
+> `score_factor`. See `docs/r5-lite.md`.
 
 That is the point of this baseline. A search procedure is not competing against
 random noise; it is competing against a grammar whose *random* draws already

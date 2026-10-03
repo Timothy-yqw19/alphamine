@@ -119,7 +119,7 @@ operators still reach +0.0561 - which is below baseline's value at N = 250. The
 usual habit of wrapping everything in `rank()` is doing far less work than
 people assume.
 
-**3. Volume inputs are exactly worthless, and the reason is instructive.** The
+**3. Volume inputs are nearly worthless, and the reason is instructive.** The
 `no-volume` variant reproduces the baseline's validation IC to four decimals.
 Inspect the baseline's winning formula:
 
@@ -127,10 +127,11 @@ Inspect the baseline's winning formula:
 mul(ts_max(sign(volume), 60), ts_min(div(low, vwap_proxy), 30))
 ```
 
-`sign(volume)` is identically 1 everywhere volume is positive, so
-`ts_max(sign(volume), 60)` is a **no-op constant**. Evaluating the formula with
-that term deleted gives +0.0646 against +0.0647 on the full universe and
-+0.0955 against +0.0955 on `liquid300`. The mined factor is really
+`sign(volume)` is 1 wherever volume is finite and `NaN` where it is not, so
+`ts_max(sign(volume), 60)` is a **60-day "has volume been observed" gate**. It is
+value-neutral rather than inert: deleting it gives +0.0646 against +0.0647 on the
+full universe (a change of 0.00004) and +0.0955 against +0.0955 on `liquid300`,
+but coverage drops from 0.986 to 0.975. The mined factor is really
 `ts_min(low / ((high + low + close) / 3), 30)` - pure price, no volume at all.
 Any pipeline that reports mined formulas without simplifying them is reporting
 decoration as structure.
@@ -168,6 +169,11 @@ the simplified signal `ts_min(low / vwap_proxy, 30)`:
 | correlation with the 3-day return | -0.004 |
 | correlation with the price level | +0.049 |
 
+The first two rows are pre-fix `decay_curve` numbers: it filtered its window by
+date alone and did not drop the last `horizon` rows. That has been fixed, and it
+now agrees with `score_factor`, which gives +0.0646 at 5 days and +0.0890 at 20
+days. The rows above are kept as the record of what was measured at the time.
+
 It is a **low-volatility / price-stability characteristic**, essentially
 orthogonal to return reversal, with very low turnover, whose predictive power
 *grows* with horizon. Rising IC and 3% daily turnover are what a slow
@@ -190,12 +196,14 @@ than from reading the formula.
   score *higher* out of sample than in sample, which is a regime statement, not
   evidence of robustness.
 * All of these are selected maxima. The luck floors are the only guard.
-* The test period has still not been looked at.
+* The test period has still not been spent, but one early smoke run did compute
+  it - see `docs/HANDOFF.md` section 5.
 
 ## Next
 
-1. `bottom300` by turnover as a contrast, to separate "liquid" from
-   "high-attention" and to price the turnover-selection effect properly.
+1. Separate "liquid" from "high-attention". The `bottom300` contrast this used
+   to ask for is done - it is the `illiquid300` variant above - but turnover still
+   bundles attention, holding period, retail participation and volatility.
 2. A market-cap or index-membership universe, if one can be sourced, so the
    numbers become comparable with the literature.
 3. Only then P1 (genetic programming). The honest bar is now +0.0647 at N = 1,000

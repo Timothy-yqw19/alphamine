@@ -1,0 +1,54 @@
+{
+  "name": "p02-random-depth4",
+  "created": "20261001-224125",
+  "config": {
+    "data_path": "data/daily_pv.h5",
+    "runs_dir": "runs",
+    "start": "2012-01-01",
+    "end": null,
+    "horizon": 5,
+    "min_listing_days": 60,
+    "include_bse": false,
+    "min_cross": 100,
+    "cache_mb": 400,
+    "workers": 5,
+    "splits": [
+      {
+        "name": "train",
+        "start": "2012-01-01",
+        "end": "2018-12-31"
+      },
+      {
+        "name": "valid",
+        "start": "2019-01-01",
+        "end": "2020-12-31"
+      },
+      {
+        "name": "test",
+        "start": "2021-01-01",
+        "end": null
+      }
+    ],
+    "shuffle_labels": false,
+    "shuffle_seed": 12345,
+    "score_test": false
+  },
+  "n_evaluations": 2000,
+  "status_counts": {
+    "ok": 1852,
+    "degenerate": 148
+  },
+  "median_seconds": 2.4328778960043564,
+  "best": {
+    "train": 0.07420284650933483,
+    "train_formula": "mulconst(ts_cov(abs(volume), vwap_proxy, 5), -0.1)",
+    "valid": 0.06466843851522625,
+    "valid_formula": "mul(ts_max(sign(volume), 60), ts_min(div(low, vwap_proxy), 30))"
+  },
+  "meta": {
+    "method": "random",
+    "max_depth": 4,
+    "seed": 0,
+    "null_model": true
+  }
+}

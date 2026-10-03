@@ -1,0 +1,133 @@
+{
+  "name": "r5-lite-turnover",
+  "created": "20261002-202029",
+  "budget_per_variant": 1000,
+  "max_depth": 4,
+  "seed": 0,
+  "variants": {
+    "liquid300": {
+      "question": "same formulas, 300 most traded names",
+      "universe_slice": [
+        "top",
+        300
+      ],
+      "n_operators": 37,
+      "n_variables": 8,
+      "status_counts": {
+        "ok": 923,
+        "degenerate": 77
+      },
+      "median_seconds": 1.0712964164849836,
+      "curve": {
+        "100": {
+          "train": 0.03719655451612946,
+          "valid": 0.07005864189551364
+        },
+        "250": {
+          "train": 0.052948244361988556,
+          "valid": 0.07263323854833323
+        },
+        "500": {
+          "train": 0.057784972318048904,
+          "valid": 0.07263323854833323
+        },
+        "1000": {
+          "train": 0.07938432992209975,
+          "valid": 0.09546554807367812
+        },
+        "final": {
+          "train": 0.07938432992209975,
+          "valid": 0.09546554807367812,
+          "median_valid": -0.0017995089554232538,
+          "best_formula": "mul(ts_max(sign(volume), 60), ts_min(div(low, vwap_proxy), 30))"
+        }
+      },
+      "null_curve": {
+        "100": {
+          "train": 0.0041443051175514565,
+          "valid": 0.0067847659933322965
+        },
+        "250": {
+          "train": 0.0056271436158067435,
+          "valid": 0.0067847659933322965
+        },
+        "500": {
+          "train": 0.01144590422595167,
+          "valid": 0.008262661618768466
+        },
+        "1000": {
+          "train": 0.016522487444980707,
+          "valid": 0.011233674134198715
+        },
+        "final": {
+          "train": 0.016522487444980707,
+          "valid": 0.011233674134198715,
+          "median_valid": 4.520864671929063e-05,
+          "best_formula": "ts_zscore(mulconst(ts_min(returns, 60), 1), 10)"
+        }
+      }
+    },
+    "illiquid300": {
+      "question": "same formulas, 300 least traded names",
+      "universe_slice": [
+        "bottom",
+        300
+      ],
+      "n_operators": 37,
+      "n_variables": 8,
+      "status_counts": {
+        "ok": 924,
+        "degenerate": 76
+      },
+      "median_seconds": 1.391829479005537,
+      "curve": {
+        "100": {
+          "train": 0.041724112956437354,
+          "valid": 0.027045175992581317
+        },
+        "250": {
+          "train": 0.0509679874104107,
+          "valid": 0.027045175992581317
+        },
+        "500": {
+          "train": 0.06051754544151082,
+          "valid": 0.07569635479307743
+        },
+        "1000": {
+          "train": 0.06051754544151082,
+          "valid": 0.07569635479307743
+        },
+        "final": {
+          "train": 0.06051754544151082,
+          "valid": 0.07569635479307743,
+          "median_valid": -0.0031859945355112323,
+          "best_formula": "ts_skew(max2(sign(low), ts_argmin(low, 15)), 20)"
+        }
+      },
+      "null_curve": {
+        "100": {
+          "train": 0.0025353465929478344,
+          "valid": 0.016683053208673738
+        },
+        "250": {
+          "train": 0.004909590252164137,
+          "valid": 0.016683053208673738
+        },
+        "500": {
+          "train": 0.004909590252164137,
+          "valid": 0.0354334159784682
+        },
+        "1000": {
+          "train": 0.008296135074844018,
+          "valid": 0.0354334159784682
+        },
+        "final": {
+          "train": 0.008296135074844018,
+          "valid": 0.0354334159784682,
+          "median_valid": -0.0002494277498835974,
+          "best_formula": "ts_skew(cs_median(open), 3)"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,232 @@
+{
+  "name": "r5-lite",
+  "created": "20261001-225430",
+  "budget_per_variant": 1000,
+  "max_depth": 4,
+  "seed": 0,
+  "variants": {
+    "baseline": {
+      "question": "everything: full grammar, all A-shares",
+      "universe_top_n": null,
+      "n_operators": 37,
+      "n_variables": 8,
+      "status_counts": {
+        "ok": 925,
+        "degenerate": 75
+      },
+      "median_seconds": 2.0629390419926494,
+      "curve": {
+        "100": {
+          "train": 0.042562440230801205,
+          "valid": 0.041149962457776
+        },
+        "250": {
+          "train": 0.07420284650933483,
+          "valid": 0.061778509657554874
+        },
+        "500": {
+          "train": 0.07420284650933483,
+          "valid": 0.061778509657554874
+        },
+        "1000": {
+          "train": 0.07420284650933483,
+          "valid": 0.06466843851522625
+        },
+        "final": {
+          "train": 0.07420284650933483,
+          "valid": 0.06466843851522625,
+          "median_valid": -0.004669854467192504,
+          "best_formula": "mul(ts_max(sign(volume), 60), ts_min(div(low, vwap_proxy), 30))"
+        }
+      },
+      "null_curve": {
+        "100": {
+          "train": 0.001408656761116069,
+          "valid": 0.0025081639100058015
+        },
+        "250": {
+          "train": 0.0025249531650871097,
+          "valid": 0.0025081639100058015
+        },
+        "500": {
+          "train": 0.00623577470204435,
+          "valid": 0.0025093903944530633
+        },
+        "1000": {
+          "train": 0.00623577470204435,
+          "valid": 0.0031949776873387743
+        },
+        "final": {
+          "train": 0.00623577470204435,
+          "valid": 0.0031949776873387743,
+          "median_valid": 0.0003846329480309911,
+          "best_formula": "ts_skew(add(cs_median(close), vwap_proxy), 5)"
+        }
+      }
+    },
+    "liquid300": {
+      "question": "same formulas, top-300 turnover universe",
+      "universe_top_n": 300,
+      "n_operators": 37,
+      "n_variables": 8,
+      "status_counts": {
+        "ok": 923,
+        "degenerate": 77
+      },
+      "median_seconds": 1.018519125005696,
+      "curve": {
+        "100": {
+          "train": 0.03719655451612946,
+          "valid": 0.07005864189551364
+        },
+        "250": {
+          "train": 0.052948244361988556,
+          "valid": 0.07263323854833323
+        },
+        "500": {
+          "train": 0.057784972318048904,
+          "valid": 0.07263323854833323
+        },
+        "1000": {
+          "train": 0.07938432992209975,
+          "valid": 0.09546554807367812
+        },
+        "final": {
+          "train": 0.07938432992209975,
+          "valid": 0.09546554807367812,
+          "median_valid": -0.0017995089554232538,
+          "best_formula": "mul(ts_max(sign(volume), 60), ts_min(div(low, vwap_proxy), 30))"
+        }
+      },
+      "null_curve": {
+        "100": {
+          "train": 0.0041443051175514565,
+          "valid": 0.0067847659933322965
+        },
+        "250": {
+          "train": 0.0056271436158067435,
+          "valid": 0.0067847659933322965
+        },
+        "500": {
+          "train": 0.01144590422595167,
+          "valid": 0.008262661618768466
+        },
+        "1000": {
+          "train": 0.016522487444980707,
+          "valid": 0.011233674134198715
+        },
+        "final": {
+          "train": 0.016522487444980707,
+          "valid": 0.011233674134198715,
+          "median_valid": 4.520864671929063e-05,
+          "best_formula": "ts_zscore(mulconst(ts_min(returns, 60), 1), 10)"
+        }
+      }
+    },
+    "no-cross-section": {
+      "question": "drop rank/zscore/scale/demean/cs_median",
+      "universe_top_n": null,
+      "n_operators": 32,
+      "n_variables": 8,
+      "status_counts": {
+        "ok": 911,
+        "degenerate": 89
+      },
+      "median_seconds": 2.0059553125029197,
+      "curve": {
+        "100": {
+          "train": 0.050954460757110666,
+          "valid": 0.05611134340333157
+        },
+        "250": {
+          "train": 0.07262356902425317,
+          "valid": 0.05611134340333157
+        },
+        "500": {
+          "train": 0.0771631979431927,
+          "valid": 0.05611134340333157
+        },
+        "1000": {
+          "train": 0.0771631979431927,
+          "valid": 0.05611134340333157
+        },
+        "final": {
+          "train": 0.0771631979431927,
+          "valid": 0.05611134340333157,
+          "median_valid": -0.005199351279535304,
+          "best_formula": "mul(max2(mul(returns, returns), sub(high, low)), ts_min(div(returns, open), 20))"
+        }
+      }
+    },
+    "no-volume": {
+      "question": "drop volume and adv20 inputs",
+      "universe_top_n": null,
+      "n_operators": 37,
+      "n_variables": 6,
+      "status_counts": {
+        "ok": 927,
+        "degenerate": 73
+      },
+      "median_seconds": 2.0270358130073873,
+      "curve": {
+        "100": {
+          "train": 0.03922263326688948,
+          "valid": 0.034024299849144034
+        },
+        "250": {
+          "train": 0.039301055750230685,
+          "valid": 0.0375302587282689
+        },
+        "500": {
+          "train": 0.050004351375936985,
+          "valid": 0.04914110825142279
+        },
+        "1000": {
+          "train": 0.059303849719418655,
+          "valid": 0.06466843851522625
+        },
+        "final": {
+          "train": 0.059303849719418655,
+          "valid": 0.06466843851522625,
+          "median_valid": -0.0015572133700933757,
+          "best_formula": "mul(ts_max(sign(close), 60), ts_min(div(low, vwap_proxy), 30))"
+        }
+      }
+    },
+    "no-time-series": {
+      "question": "drop every ts_* operator",
+      "universe_top_n": null,
+      "n_operators": 20,
+      "n_variables": 8,
+      "status_counts": {
+        "ok": 913,
+        "degenerate": 87
+      },
+      "median_seconds": 1.9964812289981637,
+      "curve": {
+        "100": {
+          "train": 0.07319133508503523,
+          "valid": 0.05351630547707322
+        },
+        "250": {
+          "train": 0.08409345869813527,
+          "valid": 0.0535320407005054
+        },
+        "500": {
+          "train": 0.08409345869813527,
+          "valid": 0.0535320407005054
+        },
+        "1000": {
+          "train": 0.08438486671673741,
+          "valid": 0.055025543819295884
+        },
+        "final": {
+          "train": 0.08438486671673741,
+          "valid": 0.055025543819295884,
+          "median_valid": -0.00043092751949412,
+          "best_formula": "mul(sqrt(addconst(close, 1)), sub(returns, add(returns, volume)))"
+        }
+      }
+    }
+  }
+}

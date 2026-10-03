@@ -1,0 +1,56 @@
+{
+  "name": "smoke",
+  "created": "20261001-215104",
+  "config": {
+    "data_path": "data/daily_pv.h5",
+    "runs_dir": "runs",
+    "start": "2012-01-01",
+    "end": null,
+    "horizon": 5,
+    "min_listing_days": 60,
+    "include_bse": false,
+    "min_cross": 100,
+    "cache_mb": 400,
+    "workers": 1,
+    "splits": [
+      {
+        "name": "train",
+        "start": "2012-01-01",
+        "end": "2018-12-31"
+      },
+      {
+        "name": "valid",
+        "start": "2019-01-01",
+        "end": "2020-12-31"
+      },
+      {
+        "name": "test",
+        "start": "2021-01-01",
+        "end": null
+      }
+    ],
+    "shuffle_labels": false,
+    "shuffle_seed": 12345
+  },
+  "n_evaluations": 60,
+  "status_counts": {
+    "ok": 42,
+    "error": 14,
+    "degenerate": 4
+  },
+  "median_seconds": 2.209116312500555,
+  "best": {
+    "train": 0.0365482966466336,
+    "train_formula": "inv(rank(delta(low, 15)))",
+    "valid": 0.04441100877787722,
+    "valid_formula": "inv(ts_var(returns, 3))",
+    "test": 0.05663867877042087,
+    "test_formula": "inv(ts_var(returns, 3))"
+  },
+  "meta": {
+    "method": "random",
+    "max_depth": 4,
+    "seed": 1,
+    "null_model": false
+  }
+}
