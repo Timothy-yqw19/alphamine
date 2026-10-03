@@ -26,6 +26,10 @@ DATA_PATH = _env_path("ALPHAMINE_DATA", PROJECT_ROOT / "data" / "daily_pv.h5")
 DEBUG_DATA_PATH = _env_path("ALPHAMINE_DATA_DEBUG", PROJECT_ROOT / "data" / "daily_pv_debug.h5")
 RUNS_DIR = _env_path("ALPHAMINE_RUNS", PROJECT_ROOT / "runs")
 
+#: Point-in-time index membership CSV files (``csi300.csv``, ``csi500.csv``).
+#: Not committed - see the README's *Data* section for the one-line fetch.
+INDEX_DIR = _env_path("ALPHAMINE_INDEX", PROJECT_ROOT / "data" / "index_membership")
+
 
 @dataclass(frozen=True)
 class Split:
@@ -77,14 +81,16 @@ class Config:
     #: published A-share work.
     include_bse: bool = False
 
-    #: Restrict the panel to a slice of the daily turnover ranking.  ``("top", n)``
-    #: keeps the n most traded names each day, ``("bottom", n)`` the n least
-    #: traded ones; ``None`` keeps the whole A-share panel.
+    #: Restrict the panel to a universe.  Three forms:
     #:
-    #: This is a *turnover* ranking, not CSI 300 membership - this dataset has no
-    #: market-cap field - but it is the closest available split between the
-    #: high-attention and the ignored end of the market.
-    universe_slice: tuple[str, int] | None = None
+    #: * ``("top", n)`` / ``("bottom", n)`` - the n most (least) traded names each
+    #:   day.  This is a **turnover** ranking, not a market-cap or index ranking.
+    #: * ``("index", "csi300")`` - true **point-in-time** index membership, read
+    #:   from ``INDEX_DIR``.  This is the universe whose ICs are comparable with
+    #:   published CSI 300 results, because it is the actual index rather than a
+    #:   liquidity proxy for it.
+    #: * ``None`` - the whole A-share panel.
+    universe_slice: tuple[str, int | str] | None = None
 
     #: Minimum number of cross-sectional names before a daily IC is considered
     #: meaningful.

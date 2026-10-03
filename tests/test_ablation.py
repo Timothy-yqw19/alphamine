@@ -26,6 +26,7 @@ def test_variants_cover_the_four_ingredients():
         "baseline",
         "liquid300",
         "illiquid300",
+        "csi300",
         "no-cross-section",
         "no-volume",
         "no-time-series",
@@ -33,13 +34,18 @@ def test_variants_cover_the_four_ingredients():
     baseline = next(v for v in DEFAULT_VARIANTS if v.name == "baseline")
     liquid = next(v for v in DEFAULT_VARIANTS if v.name == "liquid300")
     illiquid = next(v for v in DEFAULT_VARIANTS if v.name == "illiquid300")
-    # The universe pair must differ only in the universe, or the comparison
+    index = next(v for v in DEFAULT_VARIANTS if v.name == "csi300")
+    # The universe variants must differ only in the universe, or the comparison
     # would confound grammar with universe.
     assert baseline.ops == liquid.ops is None
     assert baseline.variables == liquid.variables is None
     assert illiquid.ops is None and illiquid.variables is None
+    assert index.ops is None and index.variables is None
     assert liquid.universe == ("top", 300)
     assert illiquid.universe == ("bottom", 300)
+    # csi300 is real membership, not a turnover slice: it is the universe whose
+    # numbers are comparable with published CSI 300 results.
+    assert index.universe == ("index", "csi300")
 
 
 def test_variant_config_only_changes_the_universe():
@@ -49,6 +55,15 @@ def test_variant_config_only_changes_the_universe():
     assert cfg.universe_slice == ("top", 300)
     assert cfg.horizon == base.horizon
     assert cfg.splits == base.splits
+    assert base.universe_slice is None, "the base config must not be mutated"
+
+
+def test_csi300_variant_switches_the_universe_to_index_membership():
+    base = Config()
+    index = next(v for v in DEFAULT_VARIANTS if v.name == "csi300")
+    cfg = variant_config(base, index)
+    assert cfg.universe_slice == ("index", "csi300")
+    assert cfg.horizon == base.horizon
     assert base.universe_slice is None, "the base config must not be mutated"
 
 

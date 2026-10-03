@@ -45,7 +45,7 @@ class Variant:
 
     name: str
     question: str
-    universe: tuple[str, int] | None = None
+    universe: tuple[str, int | str] | None = None
     ops: tuple[str, ...] | None = None
     variables: tuple[str, ...] | None = None
 
@@ -74,6 +74,11 @@ DEFAULT_VARIANTS: tuple[Variant, ...] = (
         "illiquid300",
         "same formulas, 300 least traded names",
         universe=("bottom", 300),
+    ),
+    Variant(
+        "csi300",
+        "same formulas, true point-in-time CSI 300 membership",
+        universe=("index", "csi300"),
     ),
     Variant(
         "no-cross-section",

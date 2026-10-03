@@ -28,7 +28,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .config import Config
+from .config import INDEX_DIR, Config
 
 #: A-share *stock* codes: exchange prefix plus six digits.
 #: SH main board 600/601/603/605 and STAR 688/689; SZ main board 000/001/002/003
@@ -262,24 +262,88 @@ def liquidity_mask(
     return (keep & panel.tradable).fillna(False)
 
 
+def index_membership(index: str, path: Path | None = None) -> pd.DataFrame:
+    """Read a point-in-time membership file: ``symbol, name, opt-in, opt-out``.
+
+    The file comes from the `index-constitution
+    <https://github.com/unliftedq/index-constitution>`_ project (MIT), which
+    turns the semi-annual CSI announcements into explicit membership intervals.
+    ``opt_out`` is empty for a name that is still a member.
+
+    The published CSVs carry a UTF-8 BOM, hence ``utf-8-sig``.
+    """
+
+    source = Path(path) if path else INDEX_DIR / f"{index}.csv"
+    if not source.is_file():
+        raise FileNotFoundError(
+            f"{source} not found. Fetch the membership file first; the README's "
+            "Data section has the URL."
+        )
+    frame = pd.read_csv(source, encoding="utf-8-sig")
+    frame.columns = [str(column).strip().lower() for column in frame.columns]
+    frame = frame.rename(columns={"opt-in": "opt_in", "opt-out": "opt_out"})
+    frame["opt_in"] = pd.to_datetime(frame["opt_in"])
+    frame["opt_out"] = pd.to_datetime(frame["opt_out"], errors="coerce")
+    return frame
+
+
+def index_mask(panel: Panel, index: str, path: Path | None = None) -> pd.DataFrame:
+    """Boolean mask: was this instrument a member of ``index`` on this date?
+
+    ``opt_out`` counts as the **last day of membership**, because a CSI change
+    takes effect after the close of the adjustment date - so a name that leaves
+    still ranks in that day's cross-section.  Instruments the panel does not
+    carry are skipped, and the mask is built on the panel's own dates.
+    """
+
+    members = index_membership(index, path)
+    dates = panel.dates
+    mask = pd.DataFrame(False, index=dates, columns=panel.instruments)
+    present = set(mask.columns)
+    for symbol, start, end in zip(
+        members["symbol"], members["opt_in"], members["opt_out"]
+    ):
+        if symbol not in present:
+            continue
+        live = dates >= start
+        if pd.notna(end):
+            live &= dates <= end
+        mask.loc[live, symbol] = True
+    return mask
+
+
+def universe_mask(
+    panel: Panel, selection: tuple[str, int | str], window: int = 20
+) -> pd.DataFrame:
+    """Boolean mask for any supported universe selection."""
+
+    side, target = selection
+    if side in {"top", "bottom"}:
+        return liquidity_mask(panel, (side, int(target)), window)
+    if side == "index":
+        return (index_mask(panel, str(target)) & panel.tradable).fillna(False)
+    raise ValueError(f"universe side must be 'top', 'bottom' or 'index', got {side!r}")
+
+
 def restrict_universe(
-    panel: Panel, selection: tuple[str, int], window: int = 20
+    panel: Panel, selection: tuple[str, int | str], window: int = 20
 ) -> Panel:
-    """Return a panel scored only on one end of the turnover ranking.
+    """Return a panel scored only inside ``selection``.
 
     The restriction is applied to the panel itself, not just to the scoring
     mask, so cross-sectional operators rank inside the restricted universe.
     That is the honest version of the experiment: a study run on large caps
-    would compute its ranks on large caps.
+    would compute its ranks on large caps, and a study run on the index would
+    compute its ranks on the index.
     """
 
-    keep = liquidity_mask(panel, selection, window)
+    keep = universe_mask(panel, selection, window)
     live = keep.any(axis=0)
     fields = {name: frame.loc[:, live] for name, frame in panel.fields.items()}
     meta = dict(panel.meta)
-    side, n = selection
+    side, target = selection
     meta.update(
-        universe_slice=(side, n),
+        universe_slice=(side, target),
         mean_universe_size=float(keep.loc[:, live].sum(axis=1).mean()),
         restricted_from=panel.shape[1],
     )
