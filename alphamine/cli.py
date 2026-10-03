@@ -177,6 +177,7 @@ def cmd_gp(args: argparse.Namespace) -> int:
         mutation_rate=args.mutation,
         elite=args.elite,
         max_depth=args.depth,
+        parsimony=args.parsimony,
         variables=tuple(args.variables) if args.variables else GP_VARIABLES,
     )
     print(f"evolving {args.n} formulas ({describe_gp(gp)}, seed {args.seed})")
@@ -367,6 +368,12 @@ def build_parser() -> argparse.ArgumentParser:
     gpp.add_argument("--crossover", type=float, default=0.6)
     gpp.add_argument("--mutation", type=float, default=0.4)
     gpp.add_argument("--elite", type=int, default=2)
+    gpp.add_argument(
+        "--parsimony",
+        type=float,
+        default=0.0,
+        help="IC tolerance within which the smaller tree wins a tournament",
+    )
     gpp.add_argument("--turnover", action="store_true", help="also compute turnover")
     gpp.add_argument(
         "--score-test",

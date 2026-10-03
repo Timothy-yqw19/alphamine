@@ -39,9 +39,9 @@ from .expr import (
     at,
     canonical,
     depth,
-    positions,
     random_formula,
     replace,
+    size,
 )
 from .runner import evaluate_batch
 
@@ -71,6 +71,11 @@ class GPConfig:
     elite: int = 2
     max_depth: int = 4
     leaf_prob: float = 0.3
+    #: Parsimony pressure, as an IC tolerance.  Within this band the *smaller*
+    #: tree wins a tournament, so bloat costs a slot on the podium without an
+    #: arbitrary penalty weight to tune.  0 disables it.  The early-stopping
+    #: ablation is P1's other half; this is the parsimony one.
+    parsimony: float = 0.0
     variables: tuple[str, ...] = field(default=VARIABLES)
     allowed_ops: tuple[str, ...] | None = None
 
@@ -114,18 +119,41 @@ def _fitness(population: list[Node], scores: dict[str, float]):
     return lambda node: scores.get(canonical(node), -np.inf)
 
 
-def _tournament(rng, population, scores, size: int) -> Node:
+def _score(node: Node, scores: dict[str, float]) -> float:
+    return scores.get(canonical(node), -np.inf)
+
+
+def _prefer(a: Node, b: Node, scores: dict[str, float], tolerance: float) -> Node:
+    """The winner of a head-to-head.
+
+    With parsimony on, a tree that is within ``tolerance`` IC of a fatter one
+    wins - so bloat has to pay for itself rather than being free.  A NaN fitness
+    (an unevaluated node) never wins on the tolerance path.
+    """
+
+    fa, fb = _score(a, scores), _score(b, scores)
+    if tolerance > 0 and np.isfinite(fa) and np.isfinite(fb) and abs(fa - fb) <= tolerance:
+        return a if size(a) <= size(b) else b
+    return a if fa >= fb else b
+
+
+def _tournament(
+    rng, population, scores, size: int, tolerance: float = 0.0
+) -> Node:
     picks = [population[int(rng.integers(len(population)))] for _ in range(size)]
-    return max(picks, key=_fitness(population, scores))
+    best = picks[0]
+    for candidate in picks[1:]:
+        best = _prefer(best, candidate, scores, tolerance)
+    return best
 
 
 def _breed(rng, population, scores, gp: GPConfig) -> Node:
     """One offspring: tournament selection, subtree crossover, subtree mutation."""
 
-    parent = _tournament(rng, population, scores, gp.tournament)
+    parent = _tournament(rng, population, scores, gp.tournament, gp.parsimony)
     node = parent
     if len(population) > 1 and rng.random() < gp.crossover_rate:
-        other = _tournament(rng, population, scores, gp.tournament)
+        other = _tournament(rng, population, scores, gp.tournament, gp.parsimony)
         a, b = safe_points(parent), safe_points(other)
         node = replace(
             parent,
@@ -208,8 +236,11 @@ def run_gp(
             zip(texts, frame["train_rank_ic"].astype(float).to_numpy(), strict=True)
         )
 
+        # Elites by IC, breaking exact ties towards the smaller tree.
         ranked = sorted(
-            population, key=_fitness(population, scores), reverse=True
+            population,
+            key=lambda node: (_score(node, scores), -size(node)),
+            reverse=True,
         )
         population = ranked[: gp.elite] + fresh
         generation += 1
@@ -227,5 +258,6 @@ def describe(gp: GPConfig | None = None) -> str:
     return (
         f"population {gp.population}, tournament {gp.tournament}, "
         f"crossover {gp.crossover_rate:g}, mutation {gp.mutation_rate:g}, "
-        f"elite {gp.elite}, depth <= {gp.max_depth}"
+        f"elite {gp.elite}, depth <= {gp.max_depth}, "
+        f"parsimony {gp.parsimony:g}"
     )

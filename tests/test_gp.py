@@ -131,3 +131,29 @@ def test_selection_is_on_training_ic_only(stub, monkeypatch):
     monkeypatch.setattr("alphamine.gp.evaluate_batch", blinded)
     second = run_gp(Config(), budget=150, seed=5, gp=GPConfig(population=30), progress=False)
     assert first["formula"].tolist() == second["formula"].tolist()
+
+
+def test_parsimony_prefers_the_smaller_tree_within_tolerance():
+    from alphamine.gp import _prefer
+
+    big = parse("div(ts_mean(volume, 20), ts_std(close, 60))")
+    small = parse("close")
+    scores = {canonical(big): 0.0500, canonical(small): 0.0495}
+
+    # 0.0005 apart: inside a 0.01 band, so the smaller tree wins
+    assert _prefer(small, big, scores, 0.01) is small
+    # same pair, parsimony off -> the higher IC wins
+    assert _prefer(small, big, scores, 0.0) is big
+    # gap wider than the band -> IC decides again
+    scores[canonical(small)] = 0.0400
+    assert _prefer(small, big, scores, 0.01) is big
+
+
+def test_parsimony_cannot_promote_an_unscored_tree():
+    from alphamine.gp import _prefer
+
+    scored = parse("div(ts_mean(volume, 20), ts_std(close, 60))")
+    unknown = parse("close")
+    scores = {canonical(scored): 0.02}
+    # `unknown` has -inf fitness, so a huge tolerance must not let it win
+    assert _prefer(unknown, scored, scores, 999.0) is scored
