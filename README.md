@@ -82,6 +82,8 @@ Working end to end:
 
 * **Data** - load `daily_pv.h5`, coerce it to a `date x instrument` float32
   panel, apply the universe rules, build forward-return labels.
+* **Universes** - the whole market, trailing-turnover slices (`top`/`bottom`), or
+  true point-in-time index membership (`csi300`, from a free MIT dataset).
 * **Expressions** - 38 operators in three families (`arith`, `ts`, `cs`); a
   parser that accepts both `ts_mean(volume, 20)` and infix `a / b`; `to_rpn` for
   a future RL generator.
@@ -99,7 +101,7 @@ Not started: genetic programming (P1), RL generation (P2), surrogate models
 (P3), the LLM loop (P4), and ideas R1, R3, R4, R6 and R7. R2 has a first cut in
 the form of the shuffled-label nulls; R5-lite is done.
 
-**Tests:** 44 tests in ~0.3 s. They run against a **synthetic in-memory panel**
+**Tests:** 54 tests in ~0.3 s. They run against a **synthetic in-memory panel**
 and need no data download.
 
 ## Where things are
@@ -133,10 +135,17 @@ conda activate alphamine
 curl -L -o data/daily_pv.h5 \
   https://huggingface.co/datasets/QuantaAlpha/qlib_csi300/resolve/main/daily_pv.h5
 
+# Point-in-time CSI 300 / CSI 500 membership - 93 KB, see "Index membership"
+mkdir -p data/index_membership
+for i in csi300 csi500; do
+  curl -L -o "data/index_membership/$i.csv" \
+    "https://raw.githubusercontent.com/unliftedq/index-constitution/main/history/$i.csv"
+done
+
 # What is in the data, and how fast is the harness?
 python -m alphamine.cli check
 
-# 44 tests, ~0.3 s - synthetic panel, no download needed
+# 54 tests, ~0.3 s - synthetic panel, no download needed
 python -m pytest -q
 ```
 
@@ -153,6 +162,10 @@ python -m alphamine.cli random --n 2000 --depth 4 --workers 5 --null
 
 # Search-space ablations: change one ingredient at a time (R5-lite). ~90 min.
 python -m alphamine.cli ablate --n 1000 --depth 4 --workers 5
+
+# Just the universe whose ICs are comparable with published CSI 300 work.
+python -m alphamine.cli ablate --n 1000 --depth 4 --workers 5 \
+  --variants csi300 --null-variants csi300 --name r5-lite-csi300
 
 # Where in the liquidity spectrum a fixed set of formulas lives (~2 min).
 python -m alphamine.cli profile --run runs/<p02-run-dir> --top 50 --buckets 10
@@ -213,6 +226,38 @@ curl -L -o data/daily_pv.h5 \
   https://huggingface.co/datasets/QuantaAlpha/qlib_csi300/resolve/main/daily_pv.h5
 ```
 
+### Index membership (point-in-time)
+
+The panel has no market cap and no index membership, so `liquid300` and
+`illiquid300` are a trailing-**turnover** proxy for the liquid segment - useful,
+but not the index. ICs that are meant to be comparable with published CSI 300
+results need the actual index, and its history is free:
+
+```bash
+mkdir -p data/index_membership
+for i in csi300 csi500; do
+  curl -L -o "data/index_membership/$i.csv" \
+    "https://raw.githubusercontent.com/unliftedq/index-constitution/main/history/$i.csv"
+done
+```
+
+[index-constitution](https://github.com/unliftedq/index-constitution) (MIT)
+reconstructs the semi-annual CSI announcements into explicit `opt-in`/`opt-out`
+intervals - real point-in-time membership, not a current snapshot. Verified here:
+`csi300.csv` holds 1,225 membership rows over 949 symbols from 2005-04-08 to
+2026-06-12, and 936 of those symbols (98.6%) are present in this panel; on
+2015-06-30, 2020-06-30 and 2025-06-30 the file marks exactly 300 members, all 300
+of them in the panel. The 13 absent symbols are long-delisted tickers.
+
+Enable it with `--variants csi300`, or `Config(universe_slice=("index", "csi300"))`.
+As with the turnover slices, the restriction is applied to the **panel**, not just
+to a scoring mask, so cross-sectional operators rank inside the index.
+
+```bash
+python -m alphamine.cli ablate --n 1000 --depth 4 --workers 5 \
+  --variants csi300 --null-variants csi300 --name r5-lite-csi300
+```
+
 ### What was verified, not assumed
 
 * 14,215,449 rows, 5,982 instruments, 4,138 dates, 2008-12-29 to 2026-01-09.
@@ -257,6 +302,12 @@ Resulting universe on 2012-01-04..2026-01-09: 3,405 dates x 5,400 instruments,
 1,239 to 5,146 names per day (mean 3,536). The minimum is July 2015, when more
 than 1,400 A-share stocks were suspended at once - a useful check that the
 tradability filter is doing its job.
+
+Two optional restrictions sit on top of this, both selected by
+`Config.universe_slice` and both applied to the **panel** rather than to a scoring
+mask, so cross-sectional operators rank inside the restricted universe: the
+trailing-turnover slices (`liquid300` / `illiquid300`) and true point-in-time
+index membership (`csi300`, see *Index membership* above).
 
 ### Label and splits
 
@@ -372,14 +423,18 @@ otherwise - see below.
 
 ## Search-space ablations (R5-lite)
 
-Six variants, 1,000 formulas each, same seed and depth. Runs
-`runs/20261001-225430-r5-lite` and `runs/20261002-202029-r5-lite-turnover`:
+Seven variants, 1,000 formulas each, same seed and depth. Runs
+`runs/20261001-225430-r5-lite`, `runs/20261002-202029-r5-lite-turnover` and
+`runs/20261002-211321-r5-lite-csi300`. The `baseline`, `liquid300` and `csi300`
+rows score the *same* 1,000 formulas - verified identical in order - so they
+differ only in the universe:
 
 | variant | operators | inputs | best train | best valid | shuffled-label valid |
 | --- | --- | --- | --- | --- | --- |
 | `baseline` | 37 | 8 | +0.0742 | +0.0647 | +0.0032 |
 | `liquid300` | 37 | 8 | +0.0794 | +0.0955 | +0.0112 |
 | `illiquid300` | 37 | 8 | +0.0605 | +0.0757 | +0.0354 |
+| `csi300` | 37 | 8 | +0.0460 | +0.0620 | +0.0093 |
 | `no-cross-section` | 32 | 8 | +0.0772 | +0.0561 | - |
 | `no-volume` | 37 | 6 | +0.0593 | +0.0647 | - |
 | `no-time-series` | 20 | 8 | +0.0844 | +0.0550 | - |
@@ -388,8 +443,16 @@ Six variants, 1,000 formulas each, same seed and depth. Runs
 
 What it says:
 
-* **The universe is the biggest single lever, and it moves the opposite way to
-  the obvious guess.** The same formulas on the 300 most traded names score
+* **True CSI 300 membership does not reproduce the turnover proxy's edge.**
+  `csi300` scores **+0.0620** on the same 1,000 formulas - below `liquid300`'s
+  +0.0955, and level with the whole market's +0.0647 (a gap of 0.0027, at the
+  noise floor). So "the liquid segment is two to three times better" is a
+  property of *ranking by turnover*, not of index membership: turnover bundles
+  attention, holding period and volatility, none of which the index selects for.
+  This is the row to quote against published CSI 300 work (QuantaAlpha report
+  0.0472), and its winner is `ts_zscore(ts_min(log(close), 250), 3)`.
+* **Among turnover-ranked universes, the biggest single lever moves the opposite
+  way to the obvious guess.** The same formulas on the 300 most traded names score
   +0.0955 instead of +0.0647, so the signal is not a small-cap illiquidity
   artifact. The 300 *least* traded names score +0.0757 - but their
   shuffled-label floor is +0.0354, three times the liquid universe's +0.0112, so
@@ -502,10 +565,11 @@ and the overfitting gap per variant.
 1. **P0.1** - transcribe the 35 reproducible 101 Alphas and tabulate IC, decay
    and turnover. This is the only thing that anchors the project to the
    published literature, and it is mostly transcription rather than engineering.
-2. **A market-cap or index-membership universe**, so absolute ICs become
-   comparable with published CSI 300 numbers. This is the one step that needs
-   data from outside the current dataset; `liquid300` is a turnover ranking, not
-   CSI 300.
+2. **A market-cap universe.** The index-membership half is done - `csi300`
+   gives point-in-time CSI 300 membership, and the result is that the index does
+   *not* inherit `liquid300`'s edge (+0.0620 against +0.0955). Market
+   capitalisation itself is still missing, and would let the free-float ranking
+   CSI actually uses be reproduced.
 3. **P1** - minimal genetic programming (~200 lines), then the parsimony and
    early-stopping ablation. The bar to beat is +0.0647 at N = 1,000 on the full
    universe and +0.0955 on `liquid300`.

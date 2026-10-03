@@ -6,14 +6,16 @@ anything, or is the *grammar* a strong prior that would pay off under any
 procedure? Idea R5 in the study plan asks which ingredients carry the signal.
 
 **Method.** Change one ingredient at a time, hold the budget fixed at 1,000
-formulas per variant, same seed, same maximum depth 4, full panel, train
-2012-2018, validation 2019-2020. Run `20261001-225430-r5-lite`.
+formulas per variant, same seed, same maximum depth 4, train 2012-2018,
+validation 2019-2020. Runs `20261001-225430-r5-lite`,
+`20261002-202029-r5-lite-turnover` and `20261002-211321-r5-lite-csi300`.
 
 | variant | operators | inputs | best train | best valid | shuffled-label valid |
 | --- | --- | --- | --- | --- | --- |
 | `baseline` | 37 | 8 | +0.0742 | +0.0647 | +0.0032 |
 | `liquid300` | 37 | 8 | +0.0794 | +0.0955 | +0.0112 |
 | `illiquid300` | 37 | 8 | +0.0605 | +0.0757 | +0.0354 |
+| `csi300` | 37 | 8 | +0.0460 | +0.0620 | +0.0093 |
 | `no-cross-section` | 32 | 8 | +0.0772 | +0.0561 | - |
 | `no-volume` | 37 | 6 | +0.0593 | +0.0647 | - |
 | `no-time-series` | 20 | 8 | +0.0844 | +0.0550 | - |
@@ -25,6 +27,16 @@ A 300-name cross-section produces a noisier daily IC than a 3,500-name one, so
 its best-of-1000 is inflated by more: +0.0112 against +0.0032. Comparing raw ICs
 across universes without those floors would have been wrong. Net of its floor,
 `liquid300` still wins (+0.0843 against +0.0615).
+
+**But `csi300` is the universe that matters, and it does not agree.** Run
+`20261002-211321-r5-lite-csi300` scores the same 1,000 formulas (verified
+identical in order) against true point-in-time CSI 300 membership, and reaches
+only **+0.0620** on validation with a floor of +0.0093 - below `liquid300`, and
+level with the whole A-share panel's +0.0647. The large `liquid300` edge is
+therefore a property of *ranking by turnover* rather than of index membership.
+The honest summary of the universe finding is narrower than it first looked: the
+liquid *segment* ranks better, the *index* does not. `csi300` is the row to quote
+against published CSI 300 work.
 
 ## The turnover contrast
 

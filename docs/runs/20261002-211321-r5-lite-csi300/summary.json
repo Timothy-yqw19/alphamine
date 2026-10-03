@@ -1,0 +1,71 @@
+{
+  "name": "r5-lite-csi300",
+  "created": "20261002-211321",
+  "budget_per_variant": 1000,
+  "max_depth": 4,
+  "seed": 0,
+  "variants": {
+    "csi300": {
+      "question": "same formulas, true point-in-time CSI 300 membership",
+      "universe_slice": [
+        "index",
+        "csi300"
+      ],
+      "n_operators": 37,
+      "n_variables": 8,
+      "status_counts": {
+        "ok": 922,
+        "degenerate": 78
+      },
+      "median_seconds": 0.23805939601152204,
+      "curve": {
+        "100": {
+          "train": 0.027645011511877093,
+          "valid": 0.042015209173325296
+        },
+        "250": {
+          "train": 0.0460177506570554,
+          "valid": 0.06197010889915832
+        },
+        "500": {
+          "train": 0.0460177506570554,
+          "valid": 0.06197010889915832
+        },
+        "1000": {
+          "train": 0.0460177506570554,
+          "valid": 0.06197010889915832
+        },
+        "final": {
+          "train": 0.0460177506570554,
+          "valid": 0.06197010889915832,
+          "median_valid": -1.9270824786138418e-05,
+          "best_formula": "ts_zscore(ts_min(log(close), 250), 3)"
+        }
+      },
+      "null_curve": {
+        "100": {
+          "train": 0.0032378160021537664,
+          "valid": 0.00695411939313659
+        },
+        "250": {
+          "train": 0.003243033764144155,
+          "valid": 0.009338882593981964
+        },
+        "500": {
+          "train": 0.003625719160151825,
+          "valid": 0.009338882593981964
+        },
+        "1000": {
+          "train": 0.017440404882726968,
+          "valid": 0.009338882593981964
+        },
+        "final": {
+          "train": 0.017440404882726968,
+          "valid": 0.009338882593981964,
+          "median_valid": -0.001107934191140708,
+          "best_formula": "mulconst(ts_product(high, 30), -0.1)"
+        }
+      }
+    }
+  }
+}

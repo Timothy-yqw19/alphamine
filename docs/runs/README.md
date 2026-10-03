@@ -21,12 +21,13 @@ byte-identical to the original.
 | `20261001-224835-smoke-ablate` | ablation smoke test, 12 formulas per variant | - |
 | `20261001-225430-r5-lite` | R5-lite, five variants x 1,000 formulas | README, `docs/r5-lite.md` |
 | `20261002-202029-r5-lite-turnover` | `liquid300` vs `illiquid300`, each with its own null | README, `docs/r5-lite.md` |
+| `20261002-211321-r5-lite-csi300` | `csi300`: true point-in-time CSI 300 membership, same 1,000 formulas | README, `docs/HANDOFF.md`, `docs/r5-lite.md` |
 
 ## The per-formula records
 
 `evals.csv` is the primary record behind every table - one row per evaluated
 formula, 21 columns, in evaluation order, carrying its status, cost, coverage and
-per-split IC. All 21 files are here, 3.7 MB in total (the P0.2 run alone has 2,001
+per-split IC. All 23 files are here, 4.2 MB in total (the P0.2 run alone has 2,001
 rows plus a matching `evals_null.csv`). The `summary.json` alongside each one is
 just the head of that table.
 

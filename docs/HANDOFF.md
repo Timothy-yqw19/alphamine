@@ -63,16 +63,25 @@ conda activate alphamine
 # 398 MB, not in the repo
 curl -L -o data/daily_pv.h5 \
   https://huggingface.co/datasets/QuantaAlpha/qlib_csi300/resolve/main/daily_pv.h5
-# 1.4 MB, a 100-instrument fixture used by the tests
-curl -L -o data/daily_pv_debug.h5 \
-  https://huggingface.co/datasets/QuantaAlpha/qlib_csi300/resolve/main/daily_pv_debug.h5
+
+# Point-in-time CSI 300 / 500 membership (93 KB).  Only the `csi300` universe
+# variant needs it, and the tests never touch it.
+mkdir -p data/index_membership
+for i in csi300 csi500; do
+  curl -L -o "data/index_membership/$i.csv" \
+    "https://raw.githubusercontent.com/unliftedq/index-constitution/main/history/$i.csv"
+done
 
 python -m alphamine.cli check          # panel, universe, label, per-op cost
-python -m pytest -q                    # 44 tests, ~0.3 s
+python -m pytest -q                    # 54 tests, ~0.3 s
 ```
 
 `MPLCONFIGDIR=/tmp/mplcache` avoids a matplotlib cache warning; the user's home
 directory is not writable from the sandbox.
+
+`data/daily_pv_debug.h5` (1.4 MB, 100 instruments x 487 dates) is **not** needed
+by the tests - `conftest.py` builds a synthetic panel - and `config.DEBUG_DATA_PATH`
+is unused.  Download it only to experiment against a small *real* file.
 
 ---
 
@@ -81,7 +90,7 @@ directory is not writable from the sandbox.
 | Path | Responsibility |
 | --- | --- |
 | `alphamine/config.py` | `Config` dataclass: paths, date window, horizon, universe rules, workers, cache size, which splits to score |
-| `alphamine/data.py` | Load HDF5, coerce to a date x instrument float32 panel, universe rules, forward-return labels, turnover ranking and universe restriction |
+| `alphamine/data.py` | Load HDF5, coerce to a date x instrument float32 panel, universe rules, forward-return labels, turnover ranking, and universe restriction (turnover slices or point-in-time index membership) |
 | `alphamine/expr/nodes.py` | Expression trees and the **canonical string**, which doubles as the cache key |
 | `alphamine/expr/ops.py` | 38 operators in three families (`arith`, `ts`, `cs`), each with a cost-derived window cap |
 | `alphamine/expr/parse.py` | Parser: `ts_mean(volume, 20)` and infix `a / b` both work; `to_rpn` for the future RL generator |
@@ -201,19 +210,22 @@ a large N.
 
 ### R5-lite - search-space ablations
 
-Runs `runs/20261001-225430-r5-lite` and `runs/20261002-202029-r5-lite-turnover`.
-1,000 formulas per variant, same seed, same depth.
+Runs `runs/20261001-225430-r5-lite`, `runs/20261002-202029-r5-lite-turnover` and
+`runs/20261002-211321-r5-lite-csi300`. 1,000 formulas per variant, same seed,
+same depth. `baseline`, `liquid300` and `csi300` score the same 1,000 formulas
+(verified identical in order), so they differ only in the universe.
 
 | variant | operators | inputs | best train | best valid | shuffled-label valid | net |
 | --- | --- | --- | --- | --- | --- | --- |
 | `baseline` (all A-shares) | 37 | 8 | +0.0742 | +0.0647 | +0.0032 | +0.0615 |
 | `liquid300` (most traded) | 37 | 8 | +0.0794 | +0.0955 | +0.0112 | +0.0843 |
 | `illiquid300` (least traded) | 37 | 8 | +0.0605 | +0.0757 | +0.0354 | +0.0403 |
+| `csi300` (true CSI 300) | 37 | 8 | +0.0460 | +0.0620 | +0.0093 | +0.0527 |
 | `no-cross-section` | 32 | 8 | +0.0772 | +0.0561 | - | - |
 | `no-volume` | 37 | 6 | +0.0593 | +0.0647 | - | - |
 | `no-time-series` | 20 | 8 | +0.0844 | +0.0550 | - | - |
 
-Four findings, in order of importance:
+Five findings, in order of importance:
 
 1. **The universe is a bigger lever than any grammar change**, and it goes the
    opposite way to the obvious guess. The signal is not a small-cap illiquidity
@@ -229,6 +241,13 @@ Four findings, in order of importance:
    see the note on it below.
 4. **Simpler grammars overfit more.** The train-minus-validation gap is +0.0095
    for `baseline`, +0.0211 for `no-cross-section`, +0.0294 for `no-time-series`.
+5. **True CSI 300 membership is not the turnover proxy.** `csi300` scores
+   **+0.0620** on the same 1,000 formulas - below `liquid300`'s +0.0955 and level
+   with the whole market's +0.0647 (a gap of 0.0027, at the noise floor). The
+   "liquid segment is two to three times better" result is therefore about
+   *turnover ranking*, not index membership, and this is the number comparable
+   with published CSI 300 work. Winner:
+   `ts_zscore(ts_min(log(close), 250), 3)`.
 
 ### The winning signal, characterised rather than read
 
@@ -405,9 +424,12 @@ deterministic. Each run writes `evals.csv`, `summary.json` and a chart into
    and turnover. This is the only thing that anchors the project to the
    published literature, and it is mostly transcription rather than
    engineering.
-2. **A market-cap or index-membership universe.** `liquid300` is a turnover
-   ranking, not CSI 300. Without this, absolute ICs cannot be compared with
-   published numbers such as QuantaAlpha's 0.0472 on CSI 300.
+2. **A market-cap universe.** The *index-membership* half of this is done:
+   `universe_slice=("index", "csi300")` (or `--variants csi300`) gives true
+   point-in-time CSI 300 membership from the free `index-constitution` dataset,
+   so absolute ICs are comparable with published numbers such as QuantaAlpha's
+   0.0472 on CSI 300. What is still missing is market capitalisation itself,
+   which the index does not provide - see section 11.
 3. **P1 - minimal genetic programming** (~200 lines), then the parsimony and
    early-stopping ablation. The bar to beat is +0.0647 at N = 1,000 on the full
    universe and +0.0955 on `liquid300`.
@@ -430,8 +452,12 @@ deterministic. Each run writes `evals.csv`, `summary.json` and a chart into
   smoke run did compute it, see section 5. The study plan's
   own checklist says once, at the end; doing it before the R3 leaderboard would
   burn it.
-* **Whether to add a market-cap data source.** This is the one step that needs
-  data from outside the current dataset.
+* **Whether to add a market-cap data source.** Half answered: index membership
+  is now in, from the free `index-constitution` dataset (section 3 and the
+  README). Market capitalisation itself is still missing. The best source is
+  Tushare `daily_basic`, but it needs 2000 points (~200 CNY/yr); Baostock can
+  derive a float cap for free but only approximately, and AkShare's market-cap
+  endpoints are current snapshots that cannot be backfilled.
 * **The repository history was rewritten once.** An unrelated directory
   (`秋招行测题库/`, a test-question bank that appeared in the project folder
   during the session) was committed by `git add -A` and pushed to the public
