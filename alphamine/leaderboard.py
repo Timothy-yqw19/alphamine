@@ -17,7 +17,7 @@ selection rather than mixing it with which formulas happened to be drawn.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -38,15 +38,17 @@ REPORT = "valid_rank_ic"
 
 @dataclass(frozen=True)
 class Entry:
-    """One method run at one seed."""
+    """One method run at one seed, on one label arm."""
 
     method: str
     seed: int
     frame: pd.DataFrame
+    labels: str = "real"
 
     @property
     def label(self) -> str:
-        return f"{self.method}-seed{self.seed}"
+        suffix = "" if self.labels == "real" else f"-{self.labels}"
+        return f"{self.method}-seed{self.seed}{suffix}"
 
 
 def curve_at(
@@ -81,9 +83,22 @@ def run_entry(
     depth: int = 4,
     workers: int | None = None,
     gp: GPConfig | None = None,
+    labels: str = "real",
+    shuffle_base: int = 777,
     progress: bool = True,
 ) -> Entry:
-    """Evaluate one method for one seed, in proposal order."""
+    """Evaluate one method, one seed and one label arm, in proposal order.
+
+    ``labels="shuffled"`` permutes the forward returns within each date, so the
+    training objective the search climbs is pure noise.  The shuffle seed varies
+    with the run seed: one shared shuffled market would correlate the arms and
+    understate the spread.
+    """
+
+    if labels == "shuffled":
+        cfg = replace(cfg, shuffle_labels=True, shuffle_seed=shuffle_base + seed)
+    elif labels != "real":
+        raise ValueError(f"unknown labels {labels!r}; known: real, shuffled")
 
     if method == "random":
         formulas = sample_random_formulas(budget, max_depth=depth, seed=seed)
@@ -95,7 +110,7 @@ def run_entry(
         )
     else:
         raise ValueError(f"unknown method {method!r}; known: random, gp")
-    return Entry(method=method, seed=seed, frame=frame)
+    return Entry(method=method, seed=seed, frame=frame, labels=labels)
 
 
 def score_entries(
@@ -112,6 +127,7 @@ def score_entries(
             rows.append(
                 {
                     "method": entry.method,
+                    "labels": entry.labels,
                     "seed": entry.seed,
                     "budget": budget,
                     "best_of_n": best,
@@ -124,7 +140,7 @@ def score_entries(
 def summarise(scores: pd.DataFrame) -> pd.DataFrame:
     """Mean and spread of each metric per (method, budget)."""
 
-    grouped = scores.groupby(["method", "budget"])
+    grouped = scores.groupby(["method", "labels", "budget"])
     out = grouped.agg(
         n_seeds=("seed", "nunique"),
         selected_mean=("selected", "mean"),
@@ -135,37 +151,107 @@ def summarise(scores: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def render(scores: pd.DataFrame, summary: pd.DataFrame) -> str:
-    """A markdown table, plus the paired per-seed differences."""
+def net_by_seed(scores: pd.DataFrame) -> pd.DataFrame:
+    """``net = selected(real) - selected(shuffled)`` per (method, seed, budget).
 
-    lines = ["| budget | method | selected (mean +/- sem) | best-of-N (mean) |",
-             "| --- | --- | --- | --- |"]
-    for _, row in summary.sort_values(["budget", "method"]).iterrows():
-        lines.append(
-            f"| {int(row['budget'])} | `{row['method']}` | "
-            f"{row['selected_mean']:+.4f} +/- {row['selected_sem']:.4f} "
-            f"(n={int(row['n_seeds'])}) | {row['best_of_n_mean']:+.4f} |"
-        )
+    R2's statistic.  A method whose net exceeds another's is picking up something
+    beyond what the grammar hands it for free.  Empty unless both arms are
+    present, so a plain leaderboard is unaffected.
+    """
+
+    if set(scores["labels"].unique()) != {"real", "shuffled"}:
+        return pd.DataFrame(columns=["method", "seed", "budget", "net"])
+    wide = scores.pivot_table(
+        index=["method", "seed", "budget"], columns="labels", values="selected"
+    ).reset_index()
+    wide["net"] = wide["real"] - wide["shuffled"]
+    return wide[["method", "seed", "budget", "net"]]
+
+
+def _paired(
+    block: pd.DataFrame, a: str, b: str, values: str, *, caption: str | None = None
+) -> str:
+    """Markdown for the per-seed paired difference of ``b`` minus ``a``.
+
+    ``caption`` matters when a report carries several paired tables - the label
+    arms and the net all produce one, and three unlabelled "mean paired
+    difference" lines would be indistinguishable.
+    """
+
+    wide = block.pivot_table(index=["seed", "budget"], columns="method", values=values)
+    if a not in wide.columns or b not in wide.columns:
+        return ""
+    wide["difference"] = wide[b] - wide[a]
+    rows = [
+        caption or f"Paired per-seed differences (`{b}` minus `{a}`) on `{values}`:",
+        "",
+        "| seed | budget | difference |",
+        "| --- | --- | --- |",
+    ]
+    for (seed, budget), row in wide.iterrows():
+        rows.append(f"| {seed} | {int(budget)} | {row['difference']:+.4f} |")
+    rows += ["", f"Mean paired difference: **{wide['difference'].mean():+.4f}**.", ""]
+    return "\n".join(rows)
+
+
+def render(scores: pd.DataFrame, summary: pd.DataFrame) -> str:
+    """Per label arm: the aggregate, the paired differences, and the net."""
 
     methods = list(dict.fromkeys(scores["method"]))  # the order they were run in
-    if len(methods) == 2:
-        a, b = methods
-        wide = scores.pivot_table(
-            index=["seed", "budget"], columns="method", values="selected"
-        )
-        if a in wide.columns and b in wide.columns:
-            wide["difference"] = wide[b] - wide[a]
-            lines += [
-                "",
-                f"Paired per-seed differences (`{b}` minus `{a}`) on the honest metric:",
-                "",
-                "| seed | budget | difference |",
-                "| --- | --- | --- |",
-            ]
-            for (seed, budget), row in wide.iterrows():
-                lines.append(f"| {seed} | {int(budget)} | {row['difference']:+.4f} |")
-            mean = wide["difference"].mean()
-            lines += ["", f"Mean paired difference: **{mean:+.4f}**."]
+    lines: list[str] = []
+
+    for labels in dict.fromkeys(scores["labels"]):
+        arm = summary[summary["labels"] == labels]
+        lines += [
+            f"### labels: `{labels}`",
+            "",
+            "| budget | method | selected (mean +/- sem) | best-of-N (mean) |",
+            "| --- | --- | --- | --- |",
+        ]
+        for _, row in arm.sort_values(["budget", "method"]).iterrows():
+            lines.append(
+                f"| {int(row['budget'])} | `{row['method']}` | "
+                f"{row['selected_mean']:+.4f} +/- {row['selected_sem']:.4f} "
+                f"(n={int(row['n_seeds'])}) | {row['best_of_n_mean']:+.4f} |"
+            )
+        lines.append("")
+        if len(methods) == 2:
+            text = _paired(
+                scores[scores["labels"] == labels], methods[0], methods[1], "selected"
+            )
+            if text:
+                lines += [text]
+
+    net = net_by_seed(scores)
+    if not net.empty:
+        lines += [
+            "### The net of each method - the statistic R2 turns on",
+            "",
+            "`net = selected(real) - selected(shuffled)`, paired by seed. A method",
+            "whose net is larger is adding value beyond the grammar.",
+            "",
+            "| method | budget | net (mean +/- sem) |",
+            "| --- | --- | --- |",
+        ]
+        for (method, budget), values in net.groupby(["method", "budget"])["net"]:
+            sem = (
+                values.std(ddof=1) / np.sqrt(len(values)) if len(values) > 1 else float("nan")
+            )
+            lines.append(f"| `{method}` | {int(budget)} | {values.mean():+.4f} +/- {sem:.4f} |")
+        lines.append("")
+        if len(methods) == 2:
+            diff = _paired(
+                net,
+                methods[0],
+                methods[1],
+                "net",
+                caption=(
+                    f"Paired per-seed differences of nets "
+                    f"(`{methods[1]}` minus `{methods[0]}`):"
+                ),
+            )
+            if diff:
+                lines += [diff]
     return "\n".join(lines) + "\n"
 
 
@@ -179,27 +265,30 @@ def run_leaderboard(
     cfg: Config | None = None,
     gp: GPConfig | None = None,
     budgets: tuple[int, ...] = DEFAULT_BUDGETS,
+    labels: tuple[str, ...] = ("real",),
     name: str = "r3-leaderboard",
     progress: bool = True,
 ) -> Path:
-    """Run every (method, seed) pair and write the leaderboard to a run directory."""
+    """Run every (label arm, method, seed) and write the board to a run directory."""
 
     cfg = cfg or Config()
     entries: list[Entry] = []
-    for method in methods:
-        for seed in seeds:
-            print(f"--- {method} seed {seed}", flush=True)
-            entry = run_entry(
-                method,
-                seed,
-                budget=budget,
-                cfg=cfg,
-                depth=depth,
-                workers=workers,
-                gp=gp,
-                progress=progress,
-            )
-            entries.append(entry)
+    for arm in labels:
+        for method in methods:
+            for seed in seeds:
+                print(f"--- {method} seed {seed} [{arm}]", flush=True)
+                entry = run_entry(
+                    method,
+                    seed,
+                    budget=budget,
+                    cfg=cfg,
+                    depth=depth,
+                    workers=workers,
+                    gp=gp,
+                    labels=arm,
+                    progress=progress,
+                )
+                entries.append(entry)
 
     scores = score_entries(entries, budgets)
     summary = summarise(scores)
@@ -215,6 +304,7 @@ def run_leaderboard(
                 "name": name,
                 "created": datetime.now().strftime("%Y%m%d-%H%M%S"),
                 "methods": list(methods),
+                "labels": list(labels),
                 "seeds": list(seeds),
                 "budget": budget,
                 "depth": depth,

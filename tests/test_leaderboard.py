@@ -80,3 +80,76 @@ def test_render_reports_a_paired_difference():
     assert "`gp` minus `random`" in text
     assert "| 0 | 2 | +0.2000 |" in text
     assert "Mean paired difference: **+0.2000**." in text
+
+
+# --------------------------------------------------------------------------
+# R2: the label axis
+# --------------------------------------------------------------------------
+
+
+def test_shuffled_labels_reach_the_config_and_vary_by_seed(monkeypatch):
+    """Each arm must get its own shuffled market, or the seeds are correlated."""
+
+    from alphamine.config import Config
+    from alphamine.leaderboard import run_entry
+
+    seen = []
+    monkeypatch.setattr(
+        "alphamine.leaderboard.evaluate_batch",
+        lambda formulas, cfg, **kw: (seen.append(cfg), _frame([0.0], [0.0]))[1],
+    )
+
+    run_entry("random", 3, budget=1, cfg=Config(), labels="shuffled", progress=False)
+    run_entry("random", 4, budget=1, cfg=Config(), labels="shuffled", progress=False)
+    run_entry("random", 3, budget=1, cfg=Config(), labels="real", progress=False)
+
+    assert seen[0].shuffle_labels is True
+    assert seen[1].shuffle_labels is True
+    assert seen[0].shuffle_seed != seen[1].shuffle_seed
+    assert seen[2].shuffle_labels is False
+
+
+def test_unknown_label_arm_is_rejected():
+    from alphamine.config import Config
+    from alphamine.leaderboard import run_entry
+
+    with pytest.raises(ValueError, match="real, shuffled"):
+        run_entry("random", 0, budget=1, cfg=Config(), labels="nonsense", progress=False)
+
+
+def test_net_is_real_minus_shuffled():
+    from alphamine.leaderboard import net_by_seed
+
+    entries = [
+        Entry("random", 0, _frame([0.1], [0.10]), labels="real"),
+        Entry("random", 0, _frame([0.1], [0.04]), labels="shuffled"),
+        Entry("gp", 0, _frame([0.1], [0.12]), labels="real"),
+        Entry("gp", 0, _frame([0.1], [0.05]), labels="shuffled"),
+    ]
+    net = net_by_seed(score_entries(entries, budgets=(1,))).set_index("method")
+    assert net.loc["random", "net"] == pytest.approx(0.06)
+    assert net.loc["gp", "net"] == pytest.approx(0.07)
+
+
+def test_net_is_empty_without_both_arms():
+    from alphamine.leaderboard import net_by_seed
+
+    scores = score_entries([Entry("random", 0, _frame([0.1], [0.1]))], budgets=(1,))
+    assert net_by_seed(scores).empty
+
+
+def test_render_reports_the_net_when_both_arms_are_present():
+    entries = [
+        Entry("random", 0, _frame([0.1], [0.10]), labels="real"),
+        Entry("random", 0, _frame([0.1], [0.04]), labels="shuffled"),
+        Entry("gp", 0, _frame([0.1], [0.12]), labels="real"),
+        Entry("gp", 0, _frame([0.1], [0.05]), labels="shuffled"),
+    ]
+    scores = score_entries(entries, budgets=(1,))
+    text = render(scores, summarise(scores))
+    assert "### labels: `real`" in text
+    assert "### labels: `shuffled`" in text
+    assert "The net of each method" in text
+    assert "| `gp` | 1 | +0.0700 +/-" in text
+    assert "Paired per-seed differences of nets (`gp` minus `random`):" in text
+    assert "Mean paired difference: **+0.0100**." in text

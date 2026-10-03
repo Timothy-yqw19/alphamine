@@ -256,6 +256,7 @@ def cmd_leaderboard(args: argparse.Namespace) -> int:
     out = run_leaderboard(
         methods=tuple(args.methods),
         seeds=tuple(args.seeds),
+        labels=tuple(args.labels),
         budget=args.n,
         depth=args.depth,
         workers=args.workers,
@@ -446,6 +447,12 @@ def build_parser() -> argparse.ArgumentParser:
     lb.add_argument("--depth", type=int, default=4)
     lb.add_argument("--methods", nargs="*", default=["random", "gp"])
     lb.add_argument("--seeds", nargs="*", type=int, default=[0, 1, 2, 3, 4])
+    lb.add_argument(
+        "--labels",
+        nargs="*",
+        default=["real"],
+        help="label arms to run: 'real', 'shuffled', or both (R2)",
+    )
     lb.add_argument(
         "--budgets",
         default="35,100,250,500,1000,2000",
