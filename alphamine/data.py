@@ -217,13 +217,13 @@ def load_panel(cfg: Config | None = None) -> Panel:
         min_listing_days=cfg.min_listing_days,
         include_bse=cfg.include_bse,
     )
-    if cfg.universe_top_n:
-        panel = restrict_universe(panel, cfg.universe_top_n)
+    if cfg.universe_slice:
+        panel = restrict_universe(panel, cfg.universe_slice)
     return panel
 
 
-def liquidity_mask(panel: Panel, top_n: int, window: int = 20) -> pd.DataFrame:
-    """Boolean mask keeping the ``top_n`` most traded names on each date.
+def liquidity_rank(panel: Panel, window: int = 20) -> pd.DataFrame:
+    """Cross-sectional rank of trailing turnover; 1 is the most traded name.
 
     The dataset has no turnover field.  ``close * volume`` is used instead, and
     the ranking was checked against known large caps: on 2023-06-30 the top 300
@@ -233,31 +233,53 @@ def liquidity_mask(panel: Panel, top_n: int, window: int = 20) -> pd.DataFrame:
     segment, which is what the comparison needs.
     """
 
-    value = (
+    turnover = (
         (panel.fields["close"] * panel.fields["volume"])
         .rolling(window, min_periods=max(2, window // 2))
         .mean()
         .where(panel.tradable)
     )
-    ranks = value.rank(axis=1, ascending=False, method="first")
-    return ranks.le(top_n)
+    return turnover.rank(axis=1, ascending=False, method="first")
 
 
-def restrict_universe(panel: Panel, top_n: int, window: int = 20) -> Panel:
-    """Return a panel scored only on the most traded names each day.
+def liquidity_mask(
+    panel: Panel, selection: tuple[str, int], window: int = 20
+) -> pd.DataFrame:
+    """Keep the ``n`` most (or least) traded names each date."""
+
+    side, n = selection
+    if side not in {"top", "bottom"}:
+        raise ValueError(f"selection side must be 'top' or 'bottom', got {side!r}")
+    ranks = liquidity_rank(panel, window)
+    if side == "top":
+        keep = ranks.le(n)
+    else:
+        # ``live`` is indexed by date, so it has to be aligned explicitly.
+        # Without ``axis=0`` pandas aligns it against the instrument columns and
+        # the comparison silently selects nothing.
+        live = ranks.notna().sum(axis=1)
+        keep = ranks.gt(live.sub(n), axis=0)
+    return (keep & panel.tradable).fillna(False)
+
+
+def restrict_universe(
+    panel: Panel, selection: tuple[str, int], window: int = 20
+) -> Panel:
+    """Return a panel scored only on one end of the turnover ranking.
 
     The restriction is applied to the panel itself, not just to the scoring
-    mask, so cross-sectional operators rank within the liquid universe.  That is
-    the honest version of the experiment: a study run on large caps would
-    compute its ranks on large caps.
+    mask, so cross-sectional operators rank inside the restricted universe.
+    That is the honest version of the experiment: a study run on large caps
+    would compute its ranks on large caps.
     """
 
-    keep = liquidity_mask(panel, top_n, window) & panel.tradable
+    keep = liquidity_mask(panel, selection, window)
     live = keep.any(axis=0)
     fields = {name: frame.loc[:, live] for name, frame in panel.fields.items()}
     meta = dict(panel.meta)
+    side, n = selection
     meta.update(
-        universe_top_n=top_n,
+        universe_slice=(side, n),
         mean_universe_size=float(keep.loc[:, live].sum(axis=1).mean()),
         restricted_from=panel.shape[1],
     )

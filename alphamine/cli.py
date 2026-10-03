@@ -19,6 +19,7 @@ from .config import Config
 from .data import field_variables, load_panel
 from .expr import Engine, canonical, depth, parse
 from .ablation import DEFAULT_VARIANTS, run_ablations
+from .ablation import plot_turnover_profile, select_formulas, turnover_profile
 from .runner import (
     evaluate_batch,
     persist_run,
@@ -182,6 +183,54 @@ def cmd_ablate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_profile(args: argparse.Namespace) -> int:
+    """Turnover profile: where in the liquidity spectrum does a signal live?
+
+    Formulas are picked on one period (training by default) and scored bucket by
+    bucket on another, so no per-bucket search inflates any bucket's IC.
+    """
+
+    run_dir = Path(args.run)
+    evals = pd.read_csv(run_dir / "evals.csv")
+    formulas = select_formulas(evals, rank_by=args.rank_by, top=args.top)
+    print(f"{len(formulas)} formulas chosen from {run_dir.name} by {args.rank_by}")
+
+    cfg = _cfg_from_args(args)
+    panel = load_panel(cfg)
+    profile = turnover_profile(
+        panel,
+        formulas,
+        n_buckets=args.buckets,
+        split=args.split,
+        horizon=args.horizon,
+    )
+
+    profile.to_csv(run_dir / f"turnover-profile-{args.split}.csv")
+    plot_turnover_profile(
+        profile,
+        run_dir / f"turnover-profile-{args.split}.png",
+        title=(
+            f"Rank IC by turnover decile ({args.split}), "
+            f"top {len(formulas)} formulas picked on {args.rank_by}"
+        ),
+    )
+
+    buckets = [f"b{index}" for index in range(1, args.buckets + 1)]
+    means = profile[buckets].mean()
+    errors = profile[buckets].sem()
+    print()
+    print("turnover decile   mean rank IC   standard error   names/day")
+    sizes = profile.attrs.get("bucket_size", {})
+    for index, column in enumerate(buckets, start=1):
+        print(
+            f"  {index:>2d} (1=liquid)   {means[column]:+11.4f}   "
+            f"{errors[column]:14.4f}   {sizes.get(index, float('nan')):9.0f}"
+        )
+    print()
+    print(f"artefacts: {run_dir}/turnover-profile-{args.split}.csv|png")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="alphamine", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -245,6 +294,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="variants that also get a shuffled-label null run",
     )
     abl.set_defaults(func=cmd_ablate)
+
+    prof = sub.add_parser("profile", help="rank IC by turnover bucket")
+    add_common(prof)
+    prof.add_argument("--run", required=True, help="a run directory with evals.csv")
+    prof.add_argument("--top", type=int, default=20, help="formulas to profile")
+    prof.add_argument(
+        "--rank-by",
+        default="train_rank_ic",
+        help="which column selects the formulas (default: training, so validation stays clean)",
+    )
+    prof.add_argument("--buckets", type=int, default=10)
+    prof.add_argument("--split", default="valid", help="period to measure the IC on")
+    prof.add_argument("--horizon", type=int, default=5)
+    prof.set_defaults(func=cmd_profile)
     return parser
 
 

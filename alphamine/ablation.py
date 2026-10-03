@@ -26,9 +26,12 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from .config import Config
+from .data import liquidity_rank
+from .eval import rank_ic_series
 from .expr import OPERATORS, default_pool
 from .runner import budget_curve, evaluate_batch, sample_random_formulas
 
@@ -42,7 +45,7 @@ class Variant:
 
     name: str
     question: str
-    universe_top_n: int | None = None
+    universe: tuple[str, int] | None = None
     ops: tuple[str, ...] | None = None
     variables: tuple[str, ...] | None = None
 
@@ -64,8 +67,13 @@ DEFAULT_VARIANTS: tuple[Variant, ...] = (
     ),
     Variant(
         "liquid300",
-        "same formulas, top-300 turnover universe",
-        universe_top_n=300,
+        "same formulas, 300 most traded names",
+        universe=("top", 300),
+    ),
+    Variant(
+        "illiquid300",
+        "same formulas, 300 least traded names",
+        universe=("bottom", 300),
     ),
     Variant(
         "no-cross-section",
@@ -86,7 +94,7 @@ DEFAULT_VARIANTS: tuple[Variant, ...] = (
 
 
 def variant_config(base: Config, variant: Variant) -> Config:
-    return replace(base, universe_top_n=variant.universe_top_n)
+    return replace(base, universe_slice=variant.universe)
 
 
 def run_ablations(
@@ -135,7 +143,7 @@ def run_ablations(
 
         entry = {
             "question": variant.question,
-            "universe_top_n": variant.universe_top_n,
+            "universe_slice": list(variant.universe) if variant.universe else None,
             "n_operators": len(variant.ops) if variant.ops else len(default_pool()),
             "n_variables": len(variant.variables) if variant.variables else 8,
             "status_counts": frame["status"].value_counts().to_dict(),
@@ -267,3 +275,155 @@ def _plot(
     fig.tight_layout()
     fig.savefig(out_path)
     plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Turnover profile
+#
+# The ablation answers "which universe scores better", but comparing two
+# separately-searched universes mixes the signal level with each universe's
+# selection floor.  This profile removes that entirely: the formulas are chosen
+# on the *training* period and then scored bucket by bucket on validation, so
+# the shape across buckets is not affected by any per-bucket search.
+# ---------------------------------------------------------------------------
+
+
+def turnover_buckets(panel, n_buckets: int = 10, window: int = 20) -> pd.DataFrame:
+    """Decile of trailing turnover, 1 = most traded."""
+
+    ranks = liquidity_rank(panel, window)
+    live = ranks.notna().sum(axis=1).replace(0, np.nan)
+    fraction = ranks.sub(1).div(live, axis=0)
+    buckets = np.floor(fraction * n_buckets).clip(upper=n_buckets - 1) + 1
+    return buckets.where(panel.tradable)
+
+
+def turnover_profile(
+    panel,
+    formulas: list[str],
+    *,
+    n_buckets: int = 10,
+    window: int = 20,
+    horizon: int = 5,
+    min_cross: int = 50,
+    split: str = "valid",
+    splits: tuple | None = None,
+    engine=None,
+) -> pd.DataFrame:
+    """Mean rank IC of each formula inside each turnover bucket.
+
+    ``split`` selects the period the IC is measured on.  Pick formulas on the
+    training period and profile them on validation; picking them on validation
+    and profiling them on validation would bake the selection into every bucket.
+    """
+
+    from .eval.metrics import split_dates
+    from .expr import Engine, parse
+
+    splits = splits or Config().splits
+    chosen = next(s for s in splits if s.name == split)
+    engine = engine or Engine(panel, cache_mb=900)
+    dates = split_dates(panel, chosen, horizon)
+    window_slice = slice(dates[0], dates[-1])
+
+    label = panel.forward_return(horizon)
+    buckets = turnover_buckets(panel, n_buckets, window)
+    factors = {text: engine.evaluate(parse(text)) for text in formulas}
+
+    # Slice to the scoring window before correlating: the ranks are
+    # cross-sectional, so a date slice changes nothing but the runtime.
+    label_window = label.loc[window_slice]
+    factors_window = {text: frame.loc[window_slice] for text, frame in factors.items()}
+
+    out = {}
+    sizes = {}
+    for index in range(1, n_buckets + 1):
+        mask = (panel.tradable & buckets.eq(index)).loc[window_slice]
+        sizes[index] = float(mask.sum(axis=1).mean())
+        for text in formulas:
+            ic = rank_ic_series(
+                factors_window[text], label_window, mask, min_cross=min_cross
+            )
+            out.setdefault(text, {})[index] = _finite(ic.mean())
+
+    frame = pd.DataFrame(out).T
+    frame.index.name = "formula"
+    frame.columns = [f"b{index}" for index in frame.columns]
+    frame.attrs["bucket_size"] = sizes
+    frame.attrs["split"] = split
+    return frame
+
+
+def plot_turnover_profile(
+    profile: pd.DataFrame, out_path: Path, *, title: str, top_n: int = 8
+) -> None:
+    """Mean rank IC with an error bar, plus the individual formulas behind it.
+
+    The mean is the point of the chart - a single formula's bucket-to-bucket
+    wiggle is mostly estimation noise - so the individual curves are drawn
+    faintly and the mean carries the error bars.
+    """
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    columns = list(profile.columns)
+    buckets = [int(column[1:]) for column in columns]
+    fig, ax = plt.subplots(figsize=(9, 5.5), dpi=140)
+
+    for _, row in profile.iterrows():
+        ax.plot(
+            buckets,
+            row.to_numpy(dtype=float),
+            color="grey",
+            linewidth=0.8,
+            alpha=0.35,
+            zorder=1,
+        )
+
+    means = profile[columns].mean().to_numpy(dtype=float)
+    errors = profile[columns].sem().to_numpy(dtype=float)
+    ax.errorbar(
+        buckets,
+        means,
+        yerr=errors,
+        marker="o",
+        linewidth=2.2,
+        capsize=4,
+        color="tab:blue",
+        label=f"mean of {len(profile)} formulas",
+        zorder=3,
+    )
+    for bucket, value in zip(buckets, means, strict=True):
+        ax.annotate(
+            f"{value:+.3f}",
+            (bucket, value),
+            textcoords="offset points",
+            xytext=(0, 9),
+            ha="center",
+            fontsize=7.5,
+            color="tab:blue",
+        )
+
+    ax.axhline(0, color="black", linewidth=0.6, alpha=0.4)
+    ax.set_xlabel("turnover decile (1 = most traded)")
+    ax.set_ylabel("rank IC")
+    ax.set_title(title)
+    ax.set_xticks(buckets)
+    ax.legend(fontsize=8, loc="best")
+    ax.grid(alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(out_path)
+    plt.close(fig)
+
+
+def select_formulas(
+    evals: pd.DataFrame, *, rank_by: str = "train_rank_ic", top: int = 20
+) -> list[str]:
+    """The best formula texts from a run, chosen on one period only."""
+
+    ok = evals[evals["status"] == "ok"]
+    scores = pd.to_numeric(ok[rank_by], errors="coerce")
+    return ok.loc[scores.nlargest(top).index, "formula"].tolist()

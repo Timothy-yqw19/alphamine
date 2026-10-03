@@ -13,6 +13,7 @@ formulas per variant, same seed, same maximum depth 4, full panel, train
 | --- | --- | --- | --- | --- | --- |
 | `baseline` | 37 | 8 | +0.0742 | +0.0647 | +0.0032 |
 | `liquid300` | 37 | 8 | +0.0794 | +0.0955 | +0.0112 |
+| `illiquid300` | 37 | 8 | +0.0605 | +0.0757 | +0.0354 |
 | `no-cross-section` | 32 | 8 | +0.0772 | +0.0561 | - |
 | `no-volume` | 37 | 6 | +0.0593 | +0.0647 | - |
 | `no-time-series` | 20 | 8 | +0.0844 | +0.0550 | - |
@@ -25,6 +26,80 @@ its best-of-1000 is inflated by more: +0.0112 against +0.0032. Comparing raw ICs
 across universes without those floors would have been wrong. Net of its floor,
 `liquid300` still wins (+0.0843 against +0.0615).
 
+## The turnover contrast
+
+`liquid300` beating the whole market is only interesting if the other end of the
+market does worse. Run `20261002-202029-r5-lite-turnover` adds `illiquid300` -
+the 300 *least* traded names each day - with its own null.
+
+| variant | best train | best valid | shuffled-label valid | net of the null | liquidity, 2020 |
+| --- | --- | --- | --- | --- | --- |
+| `baseline` (all A-shares) | +0.0742 | +0.0647 | +0.0032 | +0.0615 | 0.0213 |
+| `liquid300` (most traded) | +0.0794 | +0.0955 | +0.0112 | +0.0843 | 0.1238 |
+| `illiquid300` (least traded) | +0.0605 | +0.0757 | **+0.0354** | +0.0403 | 0.0013 |
+
+Liquidity is the 2020 mean of the 20-day average of `close * volume` in the
+data's own units: the liquid universe is 5.8x the whole market, the illiquid one
+is 1/16 of it.
+
+**The illiquid universe is a noise trap.** Its best-of-1000 on *shuffled* labels
+is +0.0354, three times the liquid universe's +0.0112, because a thinly traded
+cross-section gives a far noisier daily IC. Read raw, `illiquid300` at +0.0757
+looks like the second-best universe in the table; net of its own luck floor it is
+the worst of the three. Any study quoting mined ICs on a thin universe without a
+matched null will overstate them.
+
+The winning formula makes the same point from the other side:
+
+```
+ts_skew(max2(sign(low), ts_argmin(low, 15)), 20)
+```
+
+It is finite on only 49% of the illiquid universe (147 names a day), and it does
+not survive leaving that universe at all: **+0.0757** on `illiquid300`, `NaN` on
+`liquid300` (96 names a day, under the 100-name floor) and **-0.0171** on the full
+panel. A formula that is only good where it was found is not a factor.
+
+### A fixed-formula profile, with no search at all
+
+Comparing two searched universes still mixes the signal level with each
+universe's selection floor. The profile removes that: take the 50 formulas with
+the best *training* IC from the P0.2 run, then score each one inside every
+turnover decile on the *validation* period. No search happens per bucket, so no
+bucket's IC is a selected maximum.
+
+![Turnover profile](images/turnover-profile.png)
+
+| decile (1 = most traded) | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mean rank IC | +0.040 | +0.044 | +0.038 | +0.038 | +0.034 | +0.033 | +0.032 | +0.026 | +0.023 | +0.016 |
+| standard error | 0.004 | 0.004 | 0.003 | 0.003 | 0.002 | 0.002 | 0.002 | 0.002 | 0.002 | 0.002 |
+
+The gradient is monotone from decile 2 down and the two ends differ by +0.024
+against a combined standard error of 0.005. Same 50 formulas, same dates, only
+the cross-section changes.
+
+The single best formula from P0.2 says the same thing on its own, at ~97%
+coverage in every universe:
+
+| `ts_min(low / vwap_proxy, 30)` | validation rank IC |
+| --- | --- |
+| `liquid300` (289 names/day) | +0.0955 |
+| full panel (3,468 names/day) | +0.0647 |
+| `illiquid300` (295 names/day) | +0.0298 |
+
+### What this settles, and what it does not
+
+The P0.2 signal is **not** a small-cap illiquidity artifact. The opposite: it is
+about two and a half times stronger among the most traded names than among the
+least traded ones, on both a fixed-formula profile and an equal-budget search,
+and the winning formula is recognisably the same signal in all three universes.
+
+It does not settle what "most traded" stands for. Turnover is attention, short
+holding periods, retail participation and volatility at the same time, and this
+dataset cannot separate them. It also cannot rank by market capitalisation, so a
+true CSI 300 comparison is still out of reach.
+
 ## Five findings
 
 **1. The universe is a bigger lever than any grammar change.** The same formulas
@@ -34,10 +109,8 @@ is stronger, not weaker, in the liquid segment.
 
 Caveat that matters: this universe is selected by *trailing turnover*, so it is
 a high-attention universe, not CSI 300 membership and not a market-cap ranking.
-High-turnover A-share names are exactly where short-horizon inefficiency is
-usually reported to be largest. A true large-cap universe needs a market-cap
-field this dataset does not have, and the bottom-300-by-turnover is the obvious
-cheap contrast to run next.
+The `illiquid300` contrast below was run for exactly this reason and is what
+turns the observation into a result.
 
 **2. Cross-sectional normalisation is nearly worthless.** Dropping all five
 cross-sectional operators (`rank`, `zscore`, `scale`, `demean`, `cs_median`)

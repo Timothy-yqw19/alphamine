@@ -77,11 +77,14 @@ class Config:
     #: published A-share work.
     include_bse: bool = False
 
-    #: Keep only the ``universe_top_n`` most traded names on each date.  ``None``
-    #: means the whole A-share panel.  This is a *turnover* ranking, not CSI 300
-    #: membership, but it is the closest this dataset allows to the large,
-    #: liquid segment that published ICs are usually quoted on.
-    universe_top_n: int | None = None
+    #: Restrict the panel to a slice of the daily turnover ranking.  ``("top", n)``
+    #: keeps the n most traded names each day, ``("bottom", n)`` the n least
+    #: traded ones; ``None`` keeps the whole A-share panel.
+    #:
+    #: This is a *turnover* ranking, not CSI 300 membership - this dataset has no
+    #: market-cap field - but it is the closest available split between the
+    #: high-attention and the ignored end of the market.
+    universe_slice: tuple[str, int] | None = None
 
     #: Minimum number of cross-sectional names before a daily IC is considered
     #: meaningful.

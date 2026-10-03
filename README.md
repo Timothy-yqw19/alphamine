@@ -193,12 +193,13 @@ reversal; measuring them says otherwise - see the R5-lite section below.
 
 ## Search-space ablations (R5-lite)
 
-Five variants, 1,000 formulas each, same seed and depth:
+Six variants, 1,000 formulas each, same seed and depth:
 
 | variant | operators | inputs | best train | best valid | shuffled-label valid |
 | --- | --- | --- | --- | --- | --- |
 | `baseline` | 37 | 8 | +0.0742 | +0.0647 | +0.0032 |
 | `liquid300` | 37 | 8 | +0.0794 | +0.0955 | +0.0112 |
+| `illiquid300` | 37 | 8 | +0.0605 | +0.0757 | +0.0354 |
 | `no-cross-section` | 32 | 8 | +0.0772 | +0.0561 | - |
 | `no-volume` | 37 | 6 | +0.0593 | +0.0647 | - |
 | `no-time-series` | 20 | 8 | +0.0844 | +0.0550 | - |
@@ -209,8 +210,15 @@ What it says:
 
 * **The universe is the biggest single lever.** The same formulas on the 300
   most traded names score +0.0955 instead of +0.0647, so the signal is not a
-  small-cap artifact. Each universe variant gets its own null, because a
-  300-name cross-section has a higher selection floor (+0.0112 against +0.0032).
+  small-cap artifact. The 300 *least* traded names score +0.0757 - but their
+  shuffled-label floor is +0.0354, three times the liquid universe's +0.0112, so
+  net of its own noise the illiquid end is the worst of the three. Each universe
+  variant carries its own null for exactly this reason.
+* **The signal weakens as turnover falls.** The 50 formulas with the best
+  training IC, scored inside each turnover decile on validation with no
+  per-bucket search: +0.040 in the most traded decile down to +0.016 in the
+  least. The single best formula runs +0.0955 / +0.0647 / +0.0298 across
+  liquid / all / illiquid, at ~97% coverage in all three.
 * **Cross-sectional normalisation is nearly worthless** - dropping all five
   `rank`/`zscore`/`scale`/`demean`/`cs_median` operators costs 13%.
 * **Volume inputs are exactly worthless.** The baseline winner contains
@@ -221,17 +229,22 @@ What it says:
   +0.0642 at a 5-day horizon rising to +0.0883 at 20 days, 3.3% daily turnover,
   and -0.76 correlation with realised volatility.
 
-`docs/r5-lite.md` has the full analysis, including the two distinct signals the
-two grammars found and the overfitting gap per variant.
+![Rank IC by turnover decile](docs/images/turnover-profile.png)
+
+`docs/r5-lite.md` has the full analysis: the turnover contrast, the
+fixed-formula decile profile, the two distinct signals the two grammars found,
+and the overfitting gap per variant.
 
 ## Next
 
 1. Finish P0.2 at 10,000 evaluations and record the curve.
-2. A `bottom300`-by-turnover contrast, to separate "liquid" from
-   "high-attention" and to price the turnover-selection effect.
-3. A market-cap or index-membership universe, so the numbers become comparable
+2. A market-cap or index-membership universe, so the numbers become comparable
    with published CSI 300 work.
-4. P0.1: transcribe the 35 reproducible 101 Alphas and tabulate their IC, decay
+3. P0.1: transcribe the 35 reproducible 101 Alphas and tabulate their IC, decay
    and turnover.
-5. P1: minimal GP, then the parsimony and early-stopping ablation. The bar to
+4. P1: minimal GP, then the parsimony and early-stopping ablation. The bar to
    beat is +0.0647 at N = 1,000 on the full universe, +0.0955 on `liquid300`.
+
+## Licence
+
+MIT - see [LICENSE](LICENSE).
