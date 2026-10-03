@@ -1,0 +1,26 @@
+{
+ "name": "p01-alphas101",
+ "created": "20261002-212654",
+ "panel": [
+  3405,
+  5400
+ ],
+ "n_alphas": 35,
+ "horizon": 5,
+ "decay_horizons": [
+  5,
+  20
+ ],
+ "best": {
+  "alpha": "alpha016",
+  "valid_rank_ic": 0.05075948463396469,
+  "train_rank_ic": 0.052555446853633614
+ },
+ "n_positive_valid": 30,
+ "median_valid_rank_ic": 0.01688424002305782,
+ "mean_valid_rank_ic": 0.015191413538053759,
+ "published_comparison": {
+  "quantaalpha_csi300": 0.0472,
+  "random_search_p02_best_valid": 0.0647
+ }
+}

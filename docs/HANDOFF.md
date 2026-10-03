@@ -73,7 +73,7 @@ for i in csi300 csi500; do
 done
 
 python -m alphamine.cli check          # panel, universe, label, per-op cost
-python -m pytest -q                    # 54 tests, ~0.3 s
+python -m pytest -q                    # 134 tests, ~0.3 s
 ```
 
 `MPLCONFIGDIR=/tmp/mplcache` avoids a matplotlib cache warning; the user's home
@@ -99,6 +99,7 @@ is unused.  Download it only to experiment against a small *real* file.
 | `alphamine/eval/metrics.py` | Cross-sectional rank IC, Pearson IC, ICIR, turnover, decay |
 | `alphamine/runner.py` | Batch evaluation across worker processes, budget curves, run artefacts |
 | `alphamine/ablation.py` | R5-lite variants, the turnover profile, selection of formulas by one split |
+| `alphamine/alphas101.py` | The 35 reproducible 101 Alphas, transcribed |
 | `alphamine/cli.py` | `check`, `random`, `ablate`, `profile` |
 
 Design decisions worth keeping:
@@ -420,10 +421,11 @@ deterministic. Each run writes `evals.csv`, `summary.json` and a chart into
 
 ## 10. Next steps, ranked
 
-1. **P0.1 - transcribe the 35 reproducible 101 Alphas** and tabulate IC, decay
-   and turnover. This is the only thing that anchors the project to the
-   published literature, and it is mostly transcription rather than
-   engineering.
+1. ~~**P0.1 - transcribe the 35 reproducible 101 Alphas**~~ - done. See
+   `docs/p01-alphas101.md`: at equal budget the textbook library beats random
+   search (+0.0508 against +0.0411 at N = 35), and random search needs its whole
+   2,000-formula budget to overtake it. Six of the 35 required a new `where`
+   operator, registered but kept out of the sampling pool.
 2. **A market-cap universe.** The *index-membership* half of this is done:
    `universe_slice=("index", "csi300")` (or `--variants csi300`) gives true
    point-in-time CSI 300 membership from the free `index-constitution` dataset,

@@ -84,7 +84,8 @@ Working end to end:
   panel, apply the universe rules, build forward-return labels.
 * **Universes** - the whole market, trailing-turnover slices (`top`/`bottom`), or
   true point-in-time index membership (`csi300`, from a free MIT dataset).
-* **Expressions** - 38 operators in three families (`arith`, `ts`, `cs`); a
+* **Expressions** - 43 operators in three families (`arith`, `ts`, `cs`), 37 of
+  them in the sampling pool; a
   parser that accepts both `ts_mean(volume, 20)` and infix `a / b`; `to_rpn` for
   a future RL generator.
 * **Evaluation** - an engine with a byte-budgeted LRU subtree cache, plus a
@@ -101,7 +102,7 @@ Not started: genetic programming (P1), RL generation (P2), surrogate models
 (P3), the LLM loop (P4), and ideas R1, R3, R4, R6 and R7. R2 has a first cut in
 the form of the shuffled-label nulls; R5-lite is done.
 
-**Tests:** 54 tests in ~0.3 s. They run against a **synthetic in-memory panel**
+**Tests:** 134 tests in ~0.3 s. They run against a **synthetic in-memory panel**
 and need no data download.
 
 ## Where things are
@@ -208,9 +209,11 @@ Each run writes `evals.csv` (one row per formula, in evaluation order),
 | `alphamine/runner.py` | Batch evaluation, budget curves, run artefacts |
 | `alphamine/ablation.py` | R5-lite variants and the turnover decile profile |
 | `alphamine/cli.py` | `check`, `random`, `ablate` and `profile` entry points |
+| `alphamine/alphas101.py` | The 35 reproducible 101 Alphas, transcribed |
 | `docs/HANDOFF.md` | Start here to continue the work in a fresh session |
 | `docs/p02-random-baseline.md` | The P0.2 write-up, with caveats |
 | `docs/r5-lite.md` | The ablation and turnover-profile analysis |
+| `docs/p01-alphas101.md` | The 101-Alpha transcription and its scores |
 | `docs/runs/` | Every run's `summary.json` **and** per-formula `evals.csv` - the evidence chain for the numbers below |
 | `scripts/` | Standalone checkers, e.g. which of the 101 Alphas this dataset can express |
 | `data/` | `daily_pv.h5` (398 MB, git-ignored) |
@@ -530,6 +533,37 @@ error of 0.005.
 fixed-formula decile profile, the two distinct signals the two grammars found,
 and the overfitting gap per variant.
 
+## The 101 Alphas (P0.1)
+
+The published formula library this grammar is competing against. 35 of the 101
+are expressible from this dataset; `docs/p01-alphas101.md` has the full write-up
+and all 35 rows.
+
+| | best validation rank IC |
+| --- | --- |
+| random search, best-of-35 | +0.0411 |
+| **the 35 textbook alphas** | **+0.0508** |
+| random search, best-of-250 | +0.0618 |
+| random search, best-of-2,000 | +0.0647 |
+
+* **At equal budget the literature wins.** Thirty-five hand-derived formulas beat
+  what random search finds in its first ~100 draws, and it takes the entire
+  2,000-formula budget to overtake them. That is the honest frame for every
+  random-search number in this repository.
+* **The top three are one idea written three ways** - all a negative
+  price-versus-volume covariance (`alpha016`, `alpha013`, `alpha044`, within
+  0.007 of each other).
+* **The durable signals are slow**, reproducing P0.2 by a different route: every
+  top-eight alpha *gains* IC at a 20-day horizon, and higher IC goes with lower
+  turnover.
+* 30 of 35 are positive and 28 clear the 0.002 noise floor; the median is
+  +0.0169. The best, `alpha016` at +0.0508, is the right order of magnitude
+  against QuantaAlpha's published 0.0472 on CSI 300.
+
+Six of the 35 need a conditional (`cond ? a : b`), so `where` and
+`gt`/`lt`/`ge`/`le` were added to the operator registry - but kept **out of the
+sampling pool**, so this changes no search result.
+
 ## Traps
 
 * **Stage explicit paths; never `git add -A` in a working copy like this one.**
@@ -562,9 +596,8 @@ and the overfitting gap per variant.
 
 ## Next
 
-1. **P0.1** - transcribe the 35 reproducible 101 Alphas and tabulate IC, decay
-   and turnover. This is the only thing that anchors the project to the
-   published literature, and it is mostly transcription rather than engineering.
+1. ~~**P0.1**~~ - done, see `docs/p01-alphas101.md`. The 35 expressible alphas
+   are transcribed and scored, and at equal budget they beat random search.
 2. **A market-cap universe.** The index-membership half is done - `csi300`
    gives point-in-time CSI 300 membership, and the result is that the index does
    *not* inherit `liquid300`'s edge (+0.0620 against +0.0955). Market
