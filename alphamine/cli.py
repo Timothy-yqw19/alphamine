@@ -4,6 +4,7 @@
     alphamine random --n 10000      # the random-search baseline (experiment P0.2)
     alphamine gp --n 10000          # minimal genetic programming (P1)
     alphamine ablate --n 1000       # search-space ablations (idea R5-lite)
+    alphamine leaderboard --n 2000  # equal-budget comparison across seeds (R3)
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from .expr import Engine, canonical, depth, parse
 from .ablation import DEFAULT_VARIANTS, run_ablations
 from .ablation import plot_turnover_profile, select_formulas, turnover_profile
 from .gp import GPConfig
+from .leaderboard import run_leaderboard
 from .gp import VARIABLES as GP_VARIABLES
 from .gp import describe as describe_gp
 from .gp import run_gp
@@ -236,6 +238,36 @@ def cmd_gp(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_leaderboard(args: argparse.Namespace) -> int:
+    """R3: compare search methods at equal budget, across seeds.
+
+    Reports the honest metric - pick on training, report on validation - and the
+    paired per-seed difference.  Reading the best-of-N column instead would
+    reward whichever method was handed the luckier sample; P1 is the worked
+    example.
+    """
+
+    cfg = _cfg_from_args(args)
+    budgets = tuple(int(b) for b in args.budgets.split(",") if b.strip())
+    print(
+        f"leaderboard: {list(args.methods)} x seeds {list(args.seeds)}, "
+        f"budget {args.n} each"
+    )
+    out = run_leaderboard(
+        methods=tuple(args.methods),
+        seeds=tuple(args.seeds),
+        budget=args.n,
+        depth=args.depth,
+        workers=args.workers,
+        cfg=cfg,
+        budgets=budgets,
+        name=args.name,
+    )
+    print(f"\nartefacts: {out}\n")
+    print((out / "leaderboard.md").read_text())
+    return 0
+
+
 def cmd_ablate(args: argparse.Namespace) -> int:
     """R5-lite: change one ingredient of the search space at a time."""
 
@@ -405,6 +437,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="variants that also get a shuffled-label null run",
     )
     abl.set_defaults(func=cmd_ablate)
+
+    lb = sub.add_parser(
+        "leaderboard", help="equal-budget comparison across seeds (R3)"
+    )
+    add_common(lb)
+    lb.add_argument("--n", type=int, default=2000, help="budget per run")
+    lb.add_argument("--depth", type=int, default=4)
+    lb.add_argument("--methods", nargs="*", default=["random", "gp"])
+    lb.add_argument("--seeds", nargs="*", type=int, default=[0, 1, 2, 3, 4])
+    lb.add_argument(
+        "--budgets",
+        default="35,100,250,500,1000,2000",
+        help="comma-separated budgets to report the curves at",
+    )
+    lb.add_argument("--name", default="r3-leaderboard")
+    lb.set_defaults(func=cmd_leaderboard)
 
     prof = sub.add_parser("profile", help="rank IC by turnover bucket")
     add_common(prof)
