@@ -17,6 +17,7 @@ that temporary arrays stay bounded no matter how large the panel is.
 
 from __future__ import annotations
 
+import operator
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -177,6 +178,52 @@ def _rolling(x, window):
     return x.rolling(int(window), min_periods=_min_periods(int(window)))
 
 
+def _indicator(result, a, b):
+    """A comparison as 1.0/0.0, and NaN wherever either input is NaN.
+
+    The 101 Alphas build conditional expressions out of comparisons.  Returning
+    NaN rather than 0 for a missing input matters: a missing price silently
+    reading as "False" would paste one branch of a formula over names that have
+    no data at all.
+
+    Either side may be a scalar (``gt(close, 0)``), in which case it cannot
+    contribute missingness and is skipped.
+    """
+
+    if not isinstance(result, pd.DataFrame):
+        return result
+    live = pd.DataFrame(True, index=result.index, columns=result.columns)
+    for side in (a, b):
+        if isinstance(side, pd.DataFrame) and side.shape == result.shape:
+            live &= side.notna()
+    return result.astype("float32").where(live)
+
+
+def _comparison(op):
+    """Build a comparison operator from :mod:`operator`.
+
+    ``operator`` handles every combination we need - frame vs frame, frame vs
+    scalar and scalar vs frame - so the direction of the operands is preserved.
+    """
+
+    def apply(a, b):
+        return _indicator(op(a, b), a, b)
+
+    return apply
+
+
+def _where(cond, a, b):
+    """``cond ? a : b``, where ``cond`` is a 0/1 indicator.
+
+    A NaN condition propagates: both branches are multiplied by NaN, so the
+    result is NaN rather than a silent choice of one branch.  Either branch may
+    be a scalar.
+    """
+
+    c = cond.clip(lower=0.0, upper=1.0) if isinstance(cond, pd.DataFrame) else cond
+    return c * a + (1.0 - c) * b
+
+
 def _build_operators() -> dict[str, OpSpec]:
     ops: list[OpSpec] = [
         # -- arithmetic ------------------------------------------------------
@@ -195,6 +242,17 @@ def _build_operators() -> dict[str, OpSpec]:
         OpSpec("square", "arith", "S", lambda a: a * a),
         OpSpec("addconst", "arith", "SK", lambda a, k: a + k),
         OpSpec("mulconst", "arith", "SK", lambda a, k: a * k),
+        # Comparisons and selection.  These exist so the 101 Formulaic Alphas
+        # can be transcribed - they use `(cond ? a : b)` heavily and it is not
+        # expressible with arithmetic alone.  They are deliberately **not** in
+        # the default sampling pool: adding operators would enlarge the search
+        # space and shift every published ablation number.  `ts_median` is
+        # excluded the same way.
+        OpSpec("gt", "arith", "SS", _comparison(operator.gt), in_default_pool=False),
+        OpSpec("lt", "arith", "SS", _comparison(operator.lt), in_default_pool=False),
+        OpSpec("ge", "arith", "SS", _comparison(operator.ge), in_default_pool=False),
+        OpSpec("le", "arith", "SS", _comparison(operator.le), in_default_pool=False),
+        OpSpec("where", "arith", "SSS", _where, in_default_pool=False),
         # -- time series -----------------------------------------------------
         OpSpec("delay", "ts", "SW", lambda a, w: a.shift(int(w))),
         OpSpec("delta", "ts", "SW", lambda a, w: a - a.shift(int(w))),
