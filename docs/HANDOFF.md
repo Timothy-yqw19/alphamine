@@ -73,7 +73,7 @@ for i in csi300 csi500; do
 done
 
 python -m alphamine.cli check          # panel, universe, label, per-op cost
-python -m pytest -q                    # 134 tests, ~0.3 s
+python -m pytest -q                    # 145 tests, ~0.3 s
 ```
 
 `MPLCONFIGDIR=/tmp/mplcache` avoids a matplotlib cache warning; the user's home
@@ -100,6 +100,7 @@ is unused.  Download it only to experiment against a small *real* file.
 | `alphamine/runner.py` | Batch evaluation across worker processes, budget curves, run artefacts |
 | `alphamine/ablation.py` | R5-lite variants, the turnover profile, selection of formulas by one split |
 | `alphamine/alphas101.py` | The 35 reproducible 101 Alphas, transcribed |
+| `alphamine/gp.py` | Minimal genetic programming (P1) |
 | `alphamine/cli.py` | `check`, `random`, `ablate`, `profile` |
 
 Design decisions worth keeping:
@@ -432,9 +433,11 @@ deterministic. Each run writes `evals.csv`, `summary.json` and a chart into
    so absolute ICs are comparable with published numbers such as QuantaAlpha's
    0.0472 on CSI 300. What is still missing is market capitalisation itself,
    which the index does not provide - see section 11.
-3. **P1 - minimal genetic programming** (~200 lines), then the parsimony and
-   early-stopping ablation. The bar to beat is +0.0647 at N = 1,000 on the full
-   universe and +0.0955 on `liquid300`.
+3. ~~**P1 - minimal genetic programming**~~ - done, see `docs/p1-gp.md`. On the
+   honest equal-budget metric GP ties random search exactly at every budget: its
+   best training formula came from its own random generation 0 and 1,800 further
+   evaluations never beat it. Its apparently higher best-of-N is a selection on
+   validation. The parsimony ablation is implemented but not yet run.
 4. **R2 properly** - shuffled-label runs at large N, to separate "the grammar is
    a strong prior" from "the search procedure is smart".
 5. **R3 - the equal-budget leaderboard** across random / GP / RL / surrogate /

@@ -92,8 +92,8 @@ Working end to end:
   type-aware random sampler.
 * **Scoring** - cross-sectional rank IC, Pearson IC (opt-in), ICIR, turnover and
   decay.
-* **Search** - batch evaluation across worker processes and best-of-N budget
-  curves.
+* **Search** - random sampling, minimal genetic programming (`gp`), batch
+  evaluation across worker processes, and best-of-N budget curves.
 * **Nulls** - shuffled-label and random-number models, computed per universe.
 * **Experiments** - the `check`, `random` (P0.2), `ablate` (R5-lite) and
   `profile` entry points.
@@ -102,7 +102,7 @@ Not started: genetic programming (P1), RL generation (P2), surrogate models
 (P3), the LLM loop (P4), and ideas R1, R3, R4, R6 and R7. R2 has a first cut in
 the form of the shuffled-label nulls; R5-lite is done.
 
-**Tests:** 134 tests in ~0.3 s. They run against a **synthetic in-memory panel**
+**Tests:** 145 tests in ~0.3 s. They run against a **synthetic in-memory panel**
 and need no data download.
 
 ## Where things are
@@ -146,7 +146,7 @@ done
 # What is in the data, and how fast is the harness?
 python -m alphamine.cli check
 
-# 54 tests, ~0.3 s - synthetic panel, no download needed
+# 145 tests, ~0.3 s - synthetic panel, no download needed
 python -m pytest -q
 ```
 
@@ -210,10 +210,12 @@ Each run writes `evals.csv` (one row per formula, in evaluation order),
 | `alphamine/ablation.py` | R5-lite variants and the turnover decile profile |
 | `alphamine/cli.py` | `check`, `random`, `ablate` and `profile` entry points |
 | `alphamine/alphas101.py` | The 35 reproducible 101 Alphas, transcribed |
+| `alphamine/gp.py` | Minimal genetic programming (P1) |
 | `docs/HANDOFF.md` | Start here to continue the work in a fresh session |
 | `docs/p02-random-baseline.md` | The P0.2 write-up, with caveats |
 | `docs/r5-lite.md` | The ablation and turnover-profile analysis |
 | `docs/p01-alphas101.md` | The 101-Alpha transcription and its scores |
+| `docs/p1-gp.md` | Genetic programming, and why it does not beat random search |
 | `docs/runs/` | Every run's `summary.json` **and** per-formula `evals.csv` - the evidence chain for the numbers below |
 | `scripts/` | Standalone checkers, e.g. which of the 101 Alphas this dataset can express |
 | `data/` | `daily_pv.h5` (398 MB, git-ignored) |
@@ -417,6 +419,13 @@ large N. Across all 1,852 non-degenerate formulas the median validation rank IC
 is -0.0051 (10th percentile -0.0396, 90th +0.0184), and 7.4% of sampled trees
 were degenerate.
 
+**Which column to trust.** The "best validation" column is a running maximum over
+the validation set - a selection no method could actually make. The choice a
+method *can* make is to pick on training, and that formula scores **+0.0618**,
+not +0.0647. `scripts/compare_searches.py` reports both, and P1 below is the
+worked example of why the difference is not academic: on the honest metric
+genetic programming and random search tie exactly.
+
 See `docs/p02-random-baseline.md` for the write-up, the artefact checks and the
 caveats that stop these numbers from being comparable with published CSI 300
 results. Reading the winning formulas suggests reversal; measuring them says
@@ -564,6 +573,41 @@ Six of the 35 need a conditional (`cond ? a : b`), so `where` and
 `gt`/`lt`/`ge`/`le` were added to the operator registry - but kept **out of the
 sampling pool**, so this changes no search result.
 
+## Genetic programming (P1)
+
+Minimal GP over the same grammar, with the same budget accounting and selection
+on training IC only. Run `runs/20261002-220802-p1-gp-depth4`: 2,000 formulas,
+depth <= 4, population 200, seed 0.
+
+The second number in each cell is the one that matters - among the first N
+formulas take the best **training** IC, the choice a method could actually have
+made, and report *its* validation IC:
+
+| budget | random search | genetic programming | the 35 textbook alphas |
+| --- | --- | --- | --- |
+| 35 | +0.0411 / +0.0411 | +0.0411 / +0.0411 | +0.0508 / +0.0491 |
+| 250 | +0.0618 / +0.0618 | +0.0618 / +0.0618 | - |
+| 1,000 | +0.0647 / +0.0618 | +0.0618 / +0.0618 | - |
+| 2,000 | +0.0647 / +0.0618 | +0.0655 / +0.0618 | - |
+
+*(best-of-N / selected)*
+
+**On the honest metric the two searches are identical at every budget** - the same
+formula is selected, and it scores the same number. GP's apparently higher
+best-of-N (+0.0655 against +0.0647) is a selection on validation, not a result:
+its winner `ts_mean(sqrt(div(open, high)), 10)` scores +0.0107 on training.
+
+Generation by generation the reason is visible: **the best training IC was reached
+at generation 0 - which is literally a random sample of 200 - and 1,800 further
+evaluations never beat it.** Both searches also found the *same* best-training
+formula, `mulconst(ts_cov(abs(volume), vwap_proxy, 5), -0.1)`, at +0.074203, and
+220 of GP's 2,000 formulas also appear in the random run's 2,000.
+
+This is the third result pointing the same way and the most direct one: adding
+selection, inheritance and variation on top of random sampling changes nothing in
+this grammar at this budget. `docs/p1-gp.md` has the full analysis, including why
+the tempting answer is wrong.
+
 ## Traps
 
 * **Stage explicit paths; never `git add -A` in a working copy like this one.**
@@ -603,9 +647,10 @@ sampling pool**, so this changes no search result.
    *not* inherit `liquid300`'s edge (+0.0620 against +0.0955). Market
    capitalisation itself is still missing, and would let the free-float ranking
    CSI actually uses be reproduced.
-3. **P1** - minimal genetic programming (~200 lines), then the parsimony and
-   early-stopping ablation. The bar to beat is +0.0647 at N = 1,000 on the full
-   universe and +0.0955 on `liquid300`.
+3. ~~**P1**~~ - done, see `docs/p1-gp.md`. Genetic programming ties random
+   search exactly on the honest equal-budget metric: its best formula came from
+   its own random initial population and was never improved on. The parsimony
+   ablation is implemented (`--parsimony`) but not yet run.
 4. **R2 properly** - shuffled-label runs at large N, to separate "the grammar is
    a strong prior" from "the search procedure is smart".
 5. **R3** - the equal-budget leaderboard across random / GP / RL / surrogate /

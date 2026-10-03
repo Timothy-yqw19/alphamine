@@ -1,0 +1,57 @@
+{
+  "name": "p1-gp-depth4",
+  "created": "20261002-220802",
+  "config": {
+    "data_path": "data/daily_pv.h5",
+    "runs_dir": "runs",
+    "start": "2012-01-01",
+    "end": null,
+    "horizon": 5,
+    "min_listing_days": 60,
+    "include_bse": false,
+    "universe_slice": null,
+    "min_cross": 100,
+    "cache_mb": 800,
+    "workers": 5,
+    "splits": [
+      {
+        "name": "train",
+        "start": "2012-01-01",
+        "end": "2018-12-31"
+      },
+      {
+        "name": "valid",
+        "start": "2019-01-01",
+        "end": "2020-12-31"
+      },
+      {
+        "name": "test",
+        "start": "2021-01-01",
+        "end": null
+      }
+    ],
+    "shuffle_labels": false,
+    "shuffle_seed": 12345,
+    "score_test": false,
+    "score_pearson": false
+  },
+  "n_evaluations": 2000,
+  "status_counts": {
+    "ok": 1843,
+    "degenerate": 157
+  },
+  "median_seconds": 2.1444254585076123,
+  "best": {
+    "train": 0.07420284650933483,
+    "train_formula": "mulconst(ts_cov(abs(volume), vwap_proxy, 5), -0.1)",
+    "valid": 0.06546309277733689,
+    "valid_formula": "ts_mean(sqrt(div(open, high)), 10)"
+  },
+  "meta": {
+    "method": "gp",
+    "max_depth": 4,
+    "seed": 0,
+    "null_model": true,
+    "gp": "population 200, tournament 3, crossover 0.6, mutation 0.4, elite 2, depth <= 4"
+  }
+}
